@@ -13,3 +13,11 @@
 記録: `.local/input-events/entity-boundary-results.json`、`entity-unicode-results.json`。前者の実行session96791、後者71745は正常終了。通常サーバーPID36956/session84010を再起動せず、待受が空いている状態で直接backendの画面経路を逐次検証した。
 
 次は入力側のJSON文字列でも実体参照を構成する記号が明示的なUnicodeエスケープになるようにした比較を検討する。コード記号と正当なリテラルの両方が一致することが必要で、一律エンコード/デコードや矢印だけの成功で解決扱いにしない。
+
+## 入力JSONのUnicode表現比較
+
+同じ短い課題で、入力payloadのJSON表現だけについて&/< />をUnicodeエスケープに変更した2回は、矢印と実体参照リテラルの両方が完全一致した。出力への追加指示は使っていない。記録は `.local/input-events/entity-input-escaped-results.json`、実行session4907は正常終了。従来表現の2回不一致に対し有望だが、少数の比較で長文編集の信頼性を証明しない。
+
+この表現をprepareRequestに実装した。payloadの値は変更せず、JSON.stringify後の表現のみ変える。120000文字上限はエスケープ展開後に判定する。単体117件、構文25JS/4JSON成功。回帰では日本語・emoji・HTMLタグ・実体参照・文字としてのUnicodeエスケープを含むJSONが元payloadへ完全復元されることと、展開による上限超過を検査した。
+
+常駐サーバーへの反映、配布版更新、実VS Code長文編集の比較は未実施。根本原因の詳細な内部レイヤーと長期再現率も未確定。

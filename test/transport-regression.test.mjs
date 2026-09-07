@@ -147,6 +147,17 @@ test('serialized prompt is bounded at 120000 characters even with legacy larger 
  assert.throws(()=>prepareRequest(body,'test template',{maxPromptChars:180000}),e=>e.code==='context_too_large'&&e.details.prompt_chars===120001&&e.details.max_prompt_chars===120000);
 });
 
+test('UI request JSON escapes HTML-sensitive characters without changing payload values',()=>{
+ const content='row => row.active; literal &gt; &lt; &amp; <summary>日本語😀</summary> \\u003e';
+ const r=prepareRequest({model:MODEL,messages:[{role:'user',content}]},'test template');
+ const wire=r.prompt.split('BRIDGE_REQUEST_JSON:\n')[1].trim();
+ assert(!/[&<>]/.test(wire));
+ assert.deepEqual(JSON.parse(wire),r.payload);
+ assert.equal(JSON.parse(wire).messages[0].content,content);
+ const tooBig={model:MODEL,messages:[{role:'user',content:'&'.repeat(21000)}]};
+ assert.throws(()=>prepareRequest(tooBig,'test template'),e=>e.code==='context_too_large'&&e.details.prompt_chars>120000);
+});
+
 test('final v2 requires an end marker without reinterpreting legacy final text',()=>{
  const r=request({tools:[]});
  assert.equal(parseEnvelope(`BRIDGE_FINAL_V2 ${r.requestId}\nanswer\nEND_BRIDGE_FINAL_V2`,r).content,'answer');

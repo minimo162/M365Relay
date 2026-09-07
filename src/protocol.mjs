@@ -87,7 +87,10 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, 
     response_format:format, max_tool_calls_per_response:1,
     generation_hints:Object.fromEntries(['temperature','top_p','max_tokens','max_completion_tokens','reasoning_effort'].filter(k=>body[k]!==undefined).map(k=>[k,body[k]]))
   };
-  const prompt = `${promptTemplate.trim()}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${JSON.stringify(payload)}\n`;
+  // Keep HTML-like text out of the literal UI payload. JSON Unicode escapes
+  // preserve the exact values while avoiding entity interpretation upstream.
+  const serialized=JSON.stringify(payload).replace(/[&<>]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0'));
+  const prompt = `${promptTemplate.trim()}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${serialized}\n`;
   const promptLimit=Math.min(maxPromptChars,120000);
   if(prompt.length>promptLimit)throw new BridgeError('context_too_large', '会話とツール定義が入力上限を超えました。会話を圧縮するか、選択ツールを減らしてください。本文は切り捨てず、M365への送信前に停止しました。', 413,
     {prompt_chars:prompt.length,max_prompt_chars:promptLimit});
