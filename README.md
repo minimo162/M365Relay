@@ -55,6 +55,10 @@ PC再起動より前の`bridge.lock`が残っている場合は、OS起動時刻
 
 ## VS Codeへの手動接続（既存プロファイルを使う場合）
 
+チャット欄を広く使うには、Ctrl+Shift+Pから **Chat: Move Chat into New Window** を選び、開いたウィンドウを最大化できます。通常のチャットと同じモデル・実行方式です。
+中央の編集領域に表示する場合は **Chat: Move Chat into Editor Area** を選びます。
+Agents Windowは別の実行基盤を使うプレビュー機能で、M365Relay単独での通し動作はまだ確認していません。
+
 `Chat: Manage Language Models` → `Add Models` → `Custom Endpoint`で追加します。
 API種類は **Chat Completions**、キーは利用者ローカルの`token.txt`です。
 
