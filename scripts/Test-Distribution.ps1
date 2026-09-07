@@ -54,13 +54,9 @@ try {
     # fixture with a nonempty invalid runtime instead of editing that running image.
     # All other files and the original manifest remain byte-identical.
     $badApp = Join-Path $temp 'Corrupt runtime fixture'
-    $null = New-Item -ItemType Directory -Path $badApp
-    Get-ChildItem -LiteralPath $app | Where-Object { $_.Name -ne 'runtime' } | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination $badApp -Recurse
-    }
+    [IO.Compression.ZipFile]::ExtractToDirectory($ZipPath, $badApp)
+    & (Join-Path $badApp 'scripts\Verify-Distribution.ps1') -DistributionPath $badApp
     $badRuntime = Join-Path $badApp 'runtime'
-    $null = New-Item -ItemType Directory -Path $badRuntime
-    Copy-Item -LiteralPath (Join-Path $app 'runtime\LICENSE') -Destination $badRuntime
     [IO.File]::WriteAllBytes((Join-Path $badRuntime 'node.exe'), [byte[]]@(0x4d,0x5a,0x00))
     & (Join-Path $badApp 'Bridge.cmd') help
     if ($LASTEXITCODE -eq 0) { throw 'Corrupt runtime was accepted.' }; $checks++
