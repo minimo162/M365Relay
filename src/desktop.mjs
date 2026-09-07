@@ -66,8 +66,12 @@ export async function prepareDesktop(config,{workspace,executable}={}){
  });
  await updateJson(join(userDir,'settings.json'),settings=>{
   settings??={};assert(isObject(settings),'invalid_desktop_config','専用VS Codeの設定を読み取れません。');
-  // Keep explicit user preferences; the default avoids a separate paid model.
-  return {'chat.byokUtilityModelDefault':'mainAgent',...settings};
+  // Small utility calls prewarm decorative progress phrases at extension start.
+  // Do not put them ahead of actual work on the single M365 UI connection. Keep
+  // the full utility model for features such as applying edits; no extra API.
+  const oldGeneratedDefault=Object.keys(settings).length===1&&settings['chat.byokUtilityModelDefault']==='mainAgent';
+  return {'chat.byokUtilityModelDefault':'none','chat.utilityModel':'customendpoint/m365-copilot-ui',
+    ...(oldGeneratedDefault?{}:settings)};
  });
  return {executable,userDataDir,workspace:folder};
 }

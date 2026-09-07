@@ -14,7 +14,9 @@ test('first-run setup creates an isolated usable model without modifying a norma
  const groups=JSON.parse(await readFile(join(plan.userDataDir,'User','chatLanguageModels.json'),'utf8'));
  const m=groups[0].models[0];assert.equal(m.requestHeaders.Authorization,'Bearer '+c.token);
  assert.equal(m.url,'http://127.0.0.1:8731/v1/chat/completions');assert.equal(groups[0].apiKey,undefined);
- assert.equal((JSON.parse(await readFile(join(plan.userDataDir,'User','settings.json'),'utf8')))['chat.byokUtilityModelDefault'],'mainAgent');
+ const settings=JSON.parse(await readFile(join(plan.userDataDir,'User','settings.json'),'utf8'));
+ assert.equal(settings['chat.byokUtilityModelDefault'],'none');
+ assert.equal(settings['chat.utilityModel'],'customendpoint/m365-copilot-ui');
  assert.equal(await readFile(normal,'utf8'),'USER SETTINGS');
  assert.match(await readFile(join(plan.workspace,'はじめに.md'),'utf8'),/サインイン/);
 });
@@ -54,4 +56,12 @@ test('workspace arguments are validated and launching never interprets them thro
 test('VS Code discovery reports missing prerequisite and supports explicit portable path',async()=>{
  await assert.rejects(findVSCode({env:{},exists:async()=>{throw new Error('absent');}}),{code:'vscode_not_found'});
  const path=resolve('portable/Code.exe');assert.equal(await findVSCode({env:{M365_RELAY_CODE:path},exists:async p=>assert.equal(p,path)}),path);
+});
+
+test('old generated utility default migrates without changing a customized selection',async t=>{
+ const c=await fixture(t),p=await prepareDesktop(c);const settingsPath=join(p.userDataDir,'User','settings.json');
+ await writeFile(settingsPath,JSON.stringify({'chat.byokUtilityModelDefault':'mainAgent'}));
+ await prepareDesktop(c);assert.equal(JSON.parse(await readFile(settingsPath,'utf8'))['chat.byokUtilityModelDefault'],'none');
+ await writeFile(settingsPath,JSON.stringify({'chat.byokUtilityModelDefault':'mainAgent','chat.utilityModel':'customendpoint/user-model'}));
+ await prepareDesktop(c);const s=JSON.parse(await readFile(settingsPath,'utf8'));assert.equal(s['chat.byokUtilityModelDefault'],'mainAgent');assert.equal(s['chat.utilityModel'],'customendpoint/user-model');
 });
