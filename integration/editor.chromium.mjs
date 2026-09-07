@@ -53,7 +53,7 @@ before(async()=>{
   '--disable-sync','--no-proxy-server','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'
  ],{stdio:'ignore'});
  await once(browserProcess,'spawn');
- for(let i=0;i<100;i++){
+ for(let i=0;i<400;i++){
   try{const [port,path]=(await readFile(join(profile,'DevToolsActivePort'),'utf8')).trim().split('\n');ws=`ws://127.0.0.1:${port}${path}`;break;}catch{await sleep(50);}
  }
  assert(ws,'Chromium debug endpoint must start');control=await CdpClient.connect(ws);
@@ -80,10 +80,10 @@ async function page(){
 async function put(p,text){await p.op('focus');await control.send('Input.insertText',{text},p.sessionId);}
 
 // Inspect exact text, not a whitespace-stripped/percentage approximation.
-test('native first 3000 characters reproduce the screenshot BRID boundary and old false mismatch',async()=>{
+test('first 3000 characters preserve paragraph text independently of current prompt length',async()=>{
  const p=await page();try{
   const text=template.trim()+'\n\nBRIDGE_REQUEST_ID: 11111111-1111-4111-8111-111111111111\nBRIDGE_REQUEST_JSON:\n{}\n';
-  const first=text.slice(0,3000);assert(first.endsWith('\nBRID'));await put(p,first);
+  const first=text.slice(0,3000);assert.equal(first.length,3000);await put(p,first);
   const old=await p.evalJS('document.querySelector("[contenteditable]").innerText');
   assert.notEqual(old.replace(/\r\n?/g,'\n').replace(/\n$/,''),first);
   const current=await p.op('verifyInput',{expected:first});assert.equal(current.matched,true);
@@ -129,9 +129,9 @@ test('non-preformatted browser changes to spaces/tabs are diagnosed, not erased'
 });
 test('foreign origin and non-text composer nodes fail closed',async()=>{
  const p=await page();try{
-  const r=await control.send('Runtime.evaluate',{expression:domExpression({...base,origin:'https://wrong.invalid'},'snapshot'),returnByValue:true},p.sessionId);assert(r.exceptionDetails);
+  const r=await control.send('Runtime.evaluate',{expression:domExpression({...base,origin:'https://wrong.invalid'},'snapshot'),returnByValue:true},p.sessionId);assert.equal(r.result.value.__m365_relay_dom_error__.reason,'origin_mismatch');
   await p.evalJS('document.querySelector("[contenteditable]").innerHTML="<p>safe<img alt=\\"hidden text\\"></p>"');
-  const bad=await control.send('Runtime.evaluate',{expression:domExpression({...base,origin},'snapshot'),returnByValue:true},p.sessionId);assert(bad.exceptionDetails);
+  const bad=await control.send('Runtime.evaluate',{expression:domExpression({...base,origin},'snapshot'),returnByValue:true},p.sessionId);assert.equal(bad.result.value.__m365_relay_dom_error__.reason,'unsupported_editor_node');assert.equal(bad.result.value.__m365_relay_dom_error__.tag,'IMG');
  }finally{await p.close();}
 });
 
@@ -164,9 +164,9 @@ async function backendCase({text='普通の依頼',setup='',timing={},onBeforeSe
  }
  evidence.request=request;return evidence;
 }
-test('real CDP backend inputs >40000 UTF-16 units over multiple chunks and clicks once',async()=>{
+test('real CDP backend inputs >40000 UTF-16 units in one insertion and clicks once',async()=>{
  const a=await backendCase({text:'😀 日本語 空白  ; C:\\Work\\memo.txt\n'.repeat(1500)});
- assert.ifError(a.error);assert(a.request.prompt.length>40000);assert.equal(a.fixture.inserts.join(''),a.request.prompt);
+ assert.ifError(a.error);assert(a.request.prompt.length>40000);assert.equal(a.fixture.inserts.join(''),a.request.prompt);assert.equal(a.fixture.inserts.length,1);
  assert.equal(a.fixture.blockText,a.request.prompt);assert.equal(a.fixture.sends,1);assert.equal(a.journaled,1);
  assert(a.fixture.inserts.every(s=>!/[\uD800-\uDBFF]$/.test(s)));assert.equal(JSON.parse(a.raw).content,'SYNTHETIC TEST ONLY');
  console.log(`Native complete: ${a.request.prompt.length} UTF-16 units, ${a.fixture.inserts.length} chunks, sends=1`);
@@ -181,10 +181,49 @@ test('a transient exact match followed by DOM rollback cannot trigger send',asyn
 test('actual input drop stops, exposes only safe metadata, never reinserts or clicks',async()=>{
  const a=await backendCase({text:'SECRET-DO-NOT-EXPOSE',setup:'window.dropInput=true',timing:{inputSettleMs:200,inputPollMs:25,inputStableMs:50}});
  assert.equal(a.error?.code,'input_mismatch');assert.equal(a.fixture.inserts.length,1);assert.equal(a.fixture.sends,0);assert.equal(a.journaled,0);
- const out=publicError(a.error);assert.equal(out.details.expected_chars,3000);assert.equal(out.details.observed_chars,0);assert.equal(out.details.first_difference,0);
+ const out=publicError(a.error);assert.equal(out.details.expected_chars,a.request.prompt.length);assert.equal(out.details.observed_chars,0);assert.equal(out.details.first_difference,0);
  assert(!JSON.stringify(out).includes('SECRET'));assert(!JSON.stringify(out).includes('BRIDGE_REQUEST'));
 });
 test('final atomic send check rejects edits made after the journal callback',async()=>{
  const a=await backendCase({onBeforeSend:async(c,e)=>c.send('Runtime.evaluate',{expression:'document.querySelector("[contenteditable]").firstChild.textContent="CHANGED"'},e.sid)});
  assert.equal(a.error?.code,'input_changed');assert.equal(a.fixture.sends,0);assert.equal(a.journaled,1);
+});
+
+
+test('real DOM text wrappers and hidden decorations preserve exact input',async()=>{
+ const p=await page();try{
+  for(const markup of [
+   '<p><a href="https://example.invalid/PRIVATE">text</a></p>',
+   '<p><span contenteditable="false">te<b>xt</b></span></p>',
+   '<p><span aria-hidden="true">PRIVATE</span>text</p>'
+  ]){
+   await p.evalJS(`document.querySelector('[contenteditable]').innerHTML=${JSON.stringify(markup)}`);
+   assert.equal((await p.op('verifyInput',{expected:'text'})).matched,true);
+   assert.equal((await p.op('send',{expected:'Text'})).clicked,false);
+  }
+  assert.equal(await p.evalJS('fixture.sends'),0);
+ }finally{await p.close();}
+});
+test('real CDP waits for delayed send enablement without reinserting',async()=>{
+ const a=await backendCase({
+  setup:`document.querySelector('[contenteditable]').addEventListener('input',()=>{
+   const button=document.querySelector('[aria-label="Send"]');button.disabled=true;
+   setTimeout(()=>{button.disabled=false;fixture.sendEnabled=true;},400);
+  },{once:true})`,
+  timing:{inputStableMs:50,inputPollMs:25,sendReadyMs:2000,sendReadyStableMs:50},
+  onBeforeSend:async(c,e)=>{
+   const r=await c.send('Runtime.evaluate',{expression:'fixture.sendEnabled===true',returnByValue:true},e.sid);
+   assert.equal(r.result.value,true);
+  }
+ });
+ assert.ifError(a.error);assert.equal(a.fixture.inserts.length,1);
+ assert.equal(a.fixture.inserts[0],a.request.prompt);assert.equal(a.fixture.sends,1);assert.equal(a.journaled,1);
+});
+test('real CDP times out a disabled send control without journal or click',async()=>{
+ const a=await backendCase({
+  setup:`document.querySelector('[aria-label="Send"]').disabled=true`,
+  timing:{inputStableMs:50,inputPollMs:25,sendReadyMs:200,sendReadyStableMs:50}
+ });
+ assert.equal(a.error?.code,'send_not_ready');assert.equal(a.fixture.inserts.length,1);
+ assert.equal(a.fixture.sends,0);assert.equal(a.journaled,0);
 });
