@@ -20,6 +20,49 @@ export function browserOperation(origin,selectors,operation,args={}) {
   const enabled=e=>e&&!e.disabled&&e.getAttribute('aria-disabled')!=='true';
   const editor=find(selectors.editor);
   const read=e=>e?(typeof e.value==='string'?e.value:(e.innerText||e.textContent||'')):'';
+  // innerText represents rendered layout: <p> boundaries and placeholder <br>s
+  // introduce extra line breaks. textContent, in contrast, loses every boundary.
+  // Read the plain-text editor DOM without either transformation. This reader is
+  // deliberately separate from assistant Markdown extraction above/below.
+  function editorText(e) {
+    if (!e) return {text:'',reader:'missing'};
+    if (typeof e.value === 'string') return {text:e.value,reader:'value'};
+    if (!e.isContentEditable || !e.childNodes) throw new Error('unsupported_editor');
+    const blocks=new Set(['P','DIV','PRE']);
+    const inline=new Set(['SPAN','B','STRONG','I','EM','U','S','STRIKE','CODE','MARK','SUB','SUP']);
+    let nodes=0;
+    function plain(n,depth=0) {
+      if(++nodes>100000||depth>64)throw new Error('editor_too_complex');
+      if(n.nodeType===3)return n.nodeValue??'';
+      if(n.nodeType===8)return '';
+      if(n.nodeType!==1)throw new Error('unsupported_editor_node');
+      if(n.tagName==='BR')return '\n';
+      if(n!==e&&!blocks.has(n.tagName)&&!inline.has(n.tagName))throw new Error('unsupported_editor_node');
+      if(n!==e&&(n.getAttribute('contenteditable')==='false'||n.hidden||n.getAttribute('aria-hidden')==='true'))throw new Error('nontext_editor_node');
+      const cs=Array.from(n.childNodes).filter(x=>x.nodeType!==8);
+      // An otherwise empty line has a caret-placeholder <br>, not a character.
+      // Empty paragraphs between two paragraphs still count as a blank line.
+      if((n===e||blocks.has(n.tagName))&&cs.length===1&&cs[0].nodeType===1&&cs[0].tagName==='BR')return '';
+      const parts=[];let run='',inRun=false;
+      for(const child of cs) {
+        if(child.nodeType===1&&blocks.has(child.tagName)) {
+          if(inRun){parts.push(run);run='';inRun=false;}
+          parts.push(plain(child,depth+1));
+        } else {run+=plain(child,depth+1);inRun=true;}
+      }
+      if(inRun)parts.push(run);
+      // A block boundary contributes exactly one LF, including empty blocks.
+      return parts.join('\n');
+    }
+    return {text:plain(e),reader:'contenteditable-dom'};
+  }
+  function inputCheck(expected) {
+    const current=editorText(editor),actual=normalize(current.text),want=normalize(expected);
+    let i=0;while(i<actual.length&&i<want.length&&actual[i]===want[i])i++;
+    const kind=(s,i)=>i>=s.length?'end':s[i]==='\n'?'line_break':s[i]==='\t'?'tab':s[i]===' '?'space':s[i]==='\u00a0'?'nbsp':'other';
+    return {matched:actual===want,reader:current.reader,expected_chars:want.length,observed_chars:actual.length,
+      first_difference:actual===want?null:i,expected_kind:actual===want?null:kind(want,i),observed_kind:actual===want?null:kind(actual,i)};
+  }
   function replies(){
     for(const selector of selectors.assistant){
       const nodes=docs.flatMap(d=>Array.from(d.querySelectorAll(selector)));
@@ -31,8 +74,9 @@ export function browserOperation(origin,selectors,operation,args={}) {
     }
     return {candidates:[],nonempty:false};
   }
-  const normalize=t=>t.replace(/\r\n?/g,'\n').replace(/\n$/,'');
-  if(operation==='snapshot')return {origin:location.origin,editor:!!editor,input:read(editor),busy:!!control('stop'),...replies()};
+  const normalize=t=>t.replace(/\r\n?/g,'\n');
+  if(operation==='snapshot')return {origin:location.origin,editor:!!editor,input:editorText(editor).text,busy:!!control('stop'),...replies()};
+  if(operation==='verifyInput')return inputCheck(args.expected);
   if(operation==='focus'){
     if(!editor||!enabled(editor))throw new Error('editor_missing');editor.focus();
     if(editor.isContentEditable){const r=editor.ownerDocument.createRange();r.selectNodeContents(editor);r.collapse(false);const s=editor.ownerDocument.getSelection();s.removeAllRanges();s.addRange(r);}
@@ -40,7 +84,9 @@ export function browserOperation(origin,selectors,operation,args={}) {
     return {focused:editor.ownerDocument.activeElement===editor};
   }
   if(operation==='send'){
-    if(!editor||normalize(read(editor))!==normalize(args.expected))throw new Error('input_changed');
+    if(!editor)throw new Error('editor_missing');
+    const checked=inputCheck(args.expected);
+    if(!checked.matched)return {clicked:false,input:checked};
     if(control('stop'))throw new Error('already_generating');
     const button=control('send');if(!enabled(button))throw new Error('send_missing');
     button.click();return {clicked:true};

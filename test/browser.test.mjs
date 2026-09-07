@@ -15,6 +15,7 @@ function fixture({origin=config.origin,oldReply='',dropInput=false,wrongReply=fa
     querySelectorAll(selector){return nodes[selector]??[];}};
   function element(text='',click=()=>{}){return {innerText:text,textContent:text,isContentEditable:true,ownerDocument:document,getBoundingClientRect:()=>({width:100,height:40}),getAttribute:()=>null,querySelectorAll:()=>[],focus(){document.activeElement=this;},click};}
   const editor=element(),reply=element(oldReply);
+  Object.defineProperty(editor,'value',{get(){return this.innerText;},set(value){this.innerText=value;}});
   nodes[config.selectors.editor[0]]=[editor];nodes[config.selectors.assistant[0]]=[reply];
   const send=element('送信',()=>{
     state.sent++;events.push('clicked');editor.innerText='';
@@ -41,7 +42,7 @@ function fixture({origin=config.origin,oldReply='',dropInput=false,wrongReply=fa
 }
 async function execute(f,{signal=AbortSignal.timeout(1500)}={}){
   const request=prepareRequest({model:MODEL,messages:[{role:'user',content:'test'}]},'test template');f.state.requestId=request.requestId;
-  const backend=new M365Backend(config,{connect:async()=>f.browser});
+  const backend=new M365Backend(config,{connect:async()=>f.browser,inputSettleMs:100,inputPollMs:5,inputStableMs:10});
   return backend.complete(request,{signal,onBeforeSend:async()=>f.events.push('journaled-before-send')});
 }
 test('CDP endpoint requires exact loopback port and browser path',()=>{

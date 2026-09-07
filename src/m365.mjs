@@ -2,9 +2,12 @@ import { connectOwnedBrowser } from './cdp.mjs';
 import { domExpression } from './dom.mjs';
 import { parseEnvelope } from './protocol.mjs';
 import { assert, BridgeError, delay, abortReason } from './errors.mjs';
-const normalize=t=>t.replace(/\r\n?/g,'\n').replace(/\n$/,'');
+
 export class M365Backend {
-  constructor(config,{connect=connectOwnedBrowser}={}){this.config=config;this.connect=connect;}
+  constructor(config,{connect=connectOwnedBrowser,inputSettleMs=3000,inputPollMs=100,inputStableMs=200}={}){
+    this.config=config;this.connect=connect;
+    this.inputTiming={inputSettleMs,inputPollMs,inputStableMs};
+  }
   async complete(request,{signal,onBeforeSend}) {
     const config=this.config;let browser,targetId,sessionId,sent=false,success=false;
     const evaluate=async(operation,args={},s=signal)=>{
@@ -12,6 +15,24 @@ export class M365Backend {
       if(r.exceptionDetails)throw new BridgeError('m365_dom_changed','M365画面の操作対象または状態を確認できません。ログイン状態・表示・セレクターを確認してください。',502);
       assert(r.result && Object.hasOwn(r.result,'value'),'m365_dom_changed','M365画面の状態を取得できません。',502);
       return r.result.value;
+    };
+    const inputFailure=(code,check,expectedLength)=>new BridgeError(code,
+      `依頼文の入力を照合できません（入力予定 ${expectedLength} 文字、読取 ${check.observed_chars} 文字、差分位置 ${check.first_difference??'-'}）。送信せず停止しました。`,
+      502,{stage:'editor_input',...check,total_prompt_chars:request.prompt.length});
+    const checkInput=expected=>evaluate('verifyInput',{expected});
+    // Allow the editor to reconcile its DOM. Read again, never insert again.
+    // Two matching reads separated by a quiet interval are required per chunk.
+    const settleInput=async expected=>{
+      const {inputSettleMs,inputPollMs,inputStableMs}=this.inputTiming;
+      const until=Date.now()+inputSettleMs;let matchedSince,last;
+      do {
+        abortReason(signal);last=await checkInput(expected);
+        if(last.matched){matchedSince??=Date.now();if(Date.now()-matchedSince>=inputStableMs)return;}
+        else matchedSince=undefined;
+        if(Date.now()>=until)break;
+        await delay(inputPollMs,signal);
+      }while(true);
+      throw inputFailure('input_mismatch',last,expected.length);
     };
     try {
       browser=await this.connect(config,signal);
@@ -37,20 +58,20 @@ export class M365Backend {
       let inserted='';
       while(inserted.length<request.prompt.length){
         abortReason(signal);
-        const before=await evaluate('snapshot');
-        assert(normalize(before.input)===normalize(inserted),'input_changed','入力欄が変わったため停止しました。重複入力しません。',409);
+        const before=await checkInput(inserted);
+        if(!before.matched)throw inputFailure('input_changed',before,inserted.length);
         assert((await evaluate('focus')).focused,'focus_failed','入力欄へフォーカスできません。',502);
         let end=Math.min(inserted.length+3000,request.prompt.length);
         if(end<request.prompt.length && /[\uD800-\uDBFF]/.test(request.prompt[end-1]))end--;
         const chunk=request.prompt.slice(inserted.length,end);
         // Input is not pasted through the user's clipboard; there is exactly one insertion per chunk.
         await browser.send('Input.insertText',{text:chunk},sessionId,signal,15000);inserted+=chunk;
-        await delay(50,signal);
-        const after=await evaluate('snapshot');
-        assert(normalize(after.input)===normalize(inserted),'input_mismatch','依頼文の入力に欠落・変化があります。再挿入せず停止します。',502);
+        await settleInput(inserted);
       }
       await onBeforeSend();sent=true; // Conservative: the following click may succeed even if its result is lost.
-      assert((await evaluate('send',{expected:request.prompt})).clicked,'send_unknown','送信クリックの結果が不明です。',502);
+      const clicked=await evaluate('send',{expected:request.prompt});
+      if(clicked.input&&!clicked.input.matched)throw inputFailure('input_changed',clicked.input,request.prompt.length);
+      assert(clicked.clicked,'send_unknown','送信クリックの結果が不明です。',502);
       let lastKey='',stableSince=Date.now(),lastError;
       while(true){
         abortReason(signal);await delay(config.pollIntervalMs,signal);

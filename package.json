@@ -1,6 +1,6 @@
 {
   "name": "m365-relay",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "private": true,
   "description": "A local text/tool-call adapter from VS Code Custom Endpoint to the signed-in Microsoft 365 Copilot UI. Prototype; no tool execution.",
   "type": "module",
@@ -14,6 +14,7 @@
     "diagnose": "node src/cli.mjs diagnose",
     "test": "node --test",
     "check": "node scripts/check.mjs",
-    "package:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Package-Release.ps1"
+    "package:windows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Package-Release.ps1",
+    "test:browser": "node --test integration/editor.chromium.mjs"
   }
 }

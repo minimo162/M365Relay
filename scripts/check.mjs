@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 const root=fileURLToPath(new URL('../',import.meta.url));let count=0;
-for(const dir of ['src','scripts','test'])for(const file of await readdir(join(root,dir))){
+for(const dir of ['src','scripts','test','integration'])for(const file of await readdir(join(root,dir))){
   if(!file.endsWith('.mjs'))continue;
   const r=spawnSync(process.execPath,['--check',join(root,dir,file)],{stdio:'inherit'});
   if(r.status!==0)process.exit(r.status??1);count++;

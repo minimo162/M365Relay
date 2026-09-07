@@ -6,6 +6,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('M365Relay test ' + [guid]::NewGuid().ToString('N'))
 $oldPath=$env:PATH; $oldHome=$env:M365_RELAY_HOME; $oldOptions=$env:NODE_OPTIONS
 $checks=0
+$gitExecutable = (Get-Command git -ErrorAction Stop).Source
 try {
     $null = New-Item -ItemType Directory -Path $temp
     $app = Join-Path $temp 'App with spaces'
@@ -20,8 +21,22 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Bundled init failed without PATH Node.' }; $checks++
     $tokenPath = Join-Path $env:M365_RELAY_HOME 'token.txt'
     $before = Get-Content -LiteralPath $tokenPath -Raw
+    $settingsPath = Join-Path $env:M365_RELAY_HOME 'settings.json'
+    $settings = Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $settings.port = 8742
+    [IO.File]::WriteAllText($settingsPath, ($settings | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+    $settingsBefore = (Get-FileHash -LiteralPath $settingsPath -Algorithm SHA256).Hash
     & $bridge init
     if ($LASTEXITCODE -ne 0 -or (Get-Content -LiteralPath $tokenPath -Raw) -cne $before) { throw 'Repeated init changed the connection key.' }; $checks++
+    if ((Get-FileHash -LiteralPath $settingsPath -Algorithm SHA256).Hash -cne $settingsBefore) { throw 'Repeated init changed existing settings.' }; $checks++
+    $manifest = Get-Content -LiteralPath (Join-Path $app 'release-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $package = Get-Content -LiteralPath (Join-Path $app 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $revision = & $gitExecutable -C (Split-Path -Parent $PSScriptRoot) rev-parse HEAD
+    if ($LASTEXITCODE -ne 0 -or $manifest.sourceRevision -cne $revision -or $manifest.version -cne $package.version) { throw 'Distribution provenance/version mismatch.' }
+    if ([IO.Path]::GetFileName($ZipPath) -cne "M365Relay-$($package.version)-win-x64-$($revision.Substring(0,12)).zip") { throw 'Distribution filename mismatch.' }
+    foreach ($doc in @('schema-compatibility.md','input-compatibility.md','release-notes.md','test-results.md','sources.md')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $app "docs\$doc"))) { throw "Distribution document missing: $doc" }
+    }; $checks++
     # Deliberately remove the runtime. A global fallback must never succeed.
     $node = Join-Path $app 'runtime\node.exe'
     Move-Item -LiteralPath $node -Destination "$node.saved"

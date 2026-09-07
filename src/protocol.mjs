@@ -51,7 +51,7 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 180000, 
     assert(f.description === undefined || typeof f.description === 'string', 'invalid_tool', 'description は文字列です。');
     const schema = f.parameters ?? {type:'object', properties:{}, additionalProperties:false};
     assert(isObject(schema) || typeof schema === 'boolean', 'invalid_schema', 'parameters はJSON Schemaです。');
-    validators.set(f.name, compileSchema(schema));
+    validators.set(f.name, compileSchema(schema, { toolName: f.name }));
     return { type:'function', function:{ name:f.name, description:f.description ?? '', parameters:schema } };
   });
   assert(tools.length <= 128, 'too_many_tools', '一度に渡すツールは最大128件です。');
@@ -63,7 +63,7 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 180000, 
   let finalValidator;
   if (format.type === 'json_schema') {
     assert(isObject(format.json_schema) && Object.hasOwn(format.json_schema,'schema'), 'invalid_response_format', 'json_schema.schema が必要です。');
-    finalValidator = compileSchema(format.json_schema.schema);
+    finalValidator = compileSchema(format.json_schema.schema, { source: 'response_format' });
   }
   const requestId = randomUUID();
   const payload = {
