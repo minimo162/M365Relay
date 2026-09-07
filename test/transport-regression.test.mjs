@@ -114,6 +114,17 @@ test('json-string supports empty strings and rejects malformed or non-string val
  for(const s of ['null','{}','"bad\\q"','"unterminated','"first" "second"','"literal\nnewline"'])assert.throws(()=>parseEnvelope(wrap(s),r));
 });
 
+test('code arrows and literal HTML entities remain distinct through JSON transport',()=>{
+ const r=request();
+ for(const source of ['rows.filter(row => row.active)', 'const literal = "&gt; &lt; &amp;";']){
+  const raw=rawTool(r,{command:JSON.stringify(source)}).replace('ARG /command string','ARG /command json-string');
+  const value=JSON.parse(completion(parseEnvelope(raw,r),r).choices[0].message.tool_calls[0].function.arguments).command;
+  assert.equal(value,source);
+ }
+ const escaped=rawTool(r,{command:'"rows.filter(row =\\u003e row.active)"'}).replace('ARG /command string','ARG /command json-string');
+ assert.equal(parseEnvelope(escaped,r).tool_calls[0].arguments.command,'rows.filter(row => row.active)');
+});
+
 test('outer fences do not permit surrounding prose or bypass ID and tool choice checks',()=>{
  const r=request(), other=request();
  const wrapped='```text\n'+rawTool(r)+'\n```';
