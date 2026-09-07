@@ -37,6 +37,7 @@ export function decodeImagePart(part,{messageIndex,partIndex,role},images){
  const [width,height]=dimensions(bytes,match[1]);
  assert(width>0&&height>0&&width*height<=IMAGE_LIMITS.pixels,'image_dimensions','画像の画素数が上限を超えています。',413);
  const sha256=createHash('sha256').update(bytes).digest('hex'),id=`image-${images.length+1}`;
- images.push({id,mime:match[1],bytes,sha256,width,height,messageIndex,partIndex});
- return {type:'image_reference',id,sha256,mime:match[1],width,height};
+ const fileName=`${id}-${sha256.slice(0,12)}.${match[1]==='image/png'?'png':'jpg'}`;
+ images.push({id,fileName,mime:match[1],bytes,sha256,width,height,messageIndex,partIndex});
+ return {type:'image_reference',id,fileName,sha256,mime:match[1],width,height};
 }

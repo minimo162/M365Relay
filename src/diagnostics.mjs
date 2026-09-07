@@ -18,7 +18,7 @@ export function safeDiagnostics(value) {
   const out={};
   const enums={
     stage:['m365_dom','editor_input','send_ready','backend'], dom_operation:DOM_OPERATIONS, dom_reason:DOM_REASONS, dom_tag:DOM_TAGS,
-    backend_phase:['connect','open_tab','attach_tab','wait_editor','reset_conversation','model_select','editor_stable','input_before','input_focus','input_insert','input_settle','send_ready','before_send','send','response_wait','response_validate','cleanup'],
+    backend_phase:['connect','open_tab','attach_tab','wait_editor','reset_conversation','model_select','image_attach','editor_stable','input_before','input_focus','input_insert','input_settle','send_ready','before_send','send','response_wait','response_validate','cleanup'],
     reader:['missing','value','contenteditable-dom'],
     expected_kind:['end','line_break','tab','space','nbsp','other'],
     observed_kind:['end','line_break','tab','space','nbsp','other']

@@ -5,13 +5,14 @@ import { parseEnvelope } from './protocol.mjs';
 import { assert, BridgeError, delay, abortReason } from './errors.mjs';
 
 export class M365Backend {
-  constructor(config,{connect=connectOwnedBrowser,selectModel,editorStableMs=1000,inputSettleMs=8000,inputPollMs=75,inputStableMs=250,sendReadyMs=15000,sendReadyStableMs=250,onMetrics=()=>{},responsePollMs=config.pollIntervalMs,responseStableMs=config.stableMs}={}){
-    this.config=config;this.connect=connect;this.onMetrics=onMetrics;this.selectModel=selectModel;
+  constructor(config,{connect=connectOwnedBrowser,selectModel,attachImages,editorStableMs=1000,inputSettleMs=8000,inputPollMs=75,inputStableMs=250,sendReadyMs=15000,sendReadyStableMs=250,onMetrics=()=>{},responsePollMs=config.pollIntervalMs,responseStableMs=config.stableMs}={}){
+    this.config=config;this.connect=connect;this.onMetrics=onMetrics;this.selectModel=selectModel;this.attachImages=attachImages;
     this.inputTiming={editorStableMs,inputSettleMs,inputPollMs,inputStableMs,sendReadyMs,sendReadyStableMs};
     this.responseTiming={responsePollMs,responseStableMs};
   }
   async complete(request,{signal,onBeforeSend}) {
-    assert(!request.images?.length,'image_transport_unavailable','画像添付の搬送はまだ有効ではありません。画像を省略して送信することはしません。',400);
+    assert(!request.images?.length||this.attachImages,'image_transport_unavailable','画像添付の搬送はまだ有効ではありません。画像を省略して送信することはしません。',400);
+    let imageAttachment;
     const config=this.config;let browser,targetId,sessionId,sent=false,success=false,failure,phase = 'connect';
     const started=performance.now();let phaseStarted=started,snapshots=0,firstReplyMs=null,lastReplyChangeMs=null;
     const durations={};
@@ -90,6 +91,7 @@ export class M365Backend {
       }
       assert(state.editor&&!state.nonempty&&!state.input.trim()&&!state.busy,'conversation_not_empty','会話の初期化を確認できません。送信を停止します。',409);
       if(this.selectModel){enter('model_select');await this.selectModel({browser,sessionId,config,signal});}
+      if(request.images?.length){enter('image_attach');imageAttachment=await this.attachImages({browser,sessionId,config,images:request.images,signal,onBeforeUpload:async()=>{await onBeforeSend();sent=true;}});}
       // M365 can replace an already visible editor after document load. Wait on
       // the actual node identity, not just presence or document.readyState.
       enter('editor_stable');
@@ -129,7 +131,8 @@ export class M365Backend {
         }while(true);
       }
       if(this.selectModel)await this.selectModel({browser,sessionId,config,signal,verifyOnly:true});
-      enter('before_send');await onBeforeSend();sent=true; // Conservative: the following click may succeed even if its result is lost.
+      await imageAttachment?.verify();
+      enter('before_send');if(!sent)await onBeforeSend();sent=true; // Image upload may already have marked this request as possibly sent.
       enter('send');const clicked=await evaluate('send',{expected:request.prompt});
       if(clicked.input&&!clicked.input.matched)throw inputFailure('input_changed',clicked.input,request.prompt.length);
       assert(clicked.clicked,'send_unknown','送信クリックの結果が不明です。',502);
@@ -165,6 +168,7 @@ export class M365Backend {
         try{await browser.send('Target.closeTarget',{targetId},undefined,AbortSignal.timeout(2000),2000);}catch{}
       }
       browser?.close();
+      await imageAttachment?.cleanup();
       const finished=performance.now();
       durations[phase]=(durations[phase]??0)+(finished-phaseStarted);
       const metrics={event:'backend_timing',request_id:request.requestId,

@@ -3,7 +3,7 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {safeDiagnostics} from './diagnostics.mjs';
 
-const phases=['connect','open_tab','attach_tab','wait_editor','reset_conversation','model_select','editor_stable','input_before','input_focus','input_insert','input_settle','send_ready','before_send','send','response_wait','response_validate','cleanup'];
+const phases=['connect','open_tab','attach_tab','wait_editor','reset_conversation','model_select','image_attach','editor_stable','input_before','input_focus','input_insert','input_settle','send_ready','before_send','send','response_wait','response_validate','cleanup'];
 export function logMetadata(record){
   if(!['accepted','response_returned','error','backend_timing'].includes(record?.event))return null;
   const out={time:new Date().toISOString(),event:record.event};

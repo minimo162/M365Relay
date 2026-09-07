@@ -11,6 +11,7 @@ import { BridgeError, publicError, assert } from './errors.mjs';
 import { findVSCode,prepareDesktop,launchDesktop } from './desktop.mjs';
 import { createRunLog } from './run-log.mjs';
 import { selectThinkDeeper } from './model-selection.mjs';
+import { attachRequestImages } from './image-attachments.mjs';
 async function openEdge(config){
   assert(process.platform==='win32','windows_required','専用Edgeの自動起動はWindows用です。');
   // Never silently reuse an unrelated debugging port/profile.
@@ -39,7 +40,7 @@ async function main(){
   const command=process.argv[2]??'help';
   if(command==='help'){console.log('Commands: run [workspace] | setup | init | open | diagnose | serve | recover-lock\nConfig/data: '+homePath());return;}
   if(command==='recover-lock'){await recoverProcessLock(homePath());console.log('停止済みプロセスの起動ロックを削除しました。要求台帳は保持しています。');return;}
-  const config=await loadConfig();
+  const config={...await loadConfig(),allowImages:true};
   let desktop;
   if(command==='setup'||command==='run'){
     assert(process.platform==='win32','windows_required','Run.cmdはWindows用です。');
@@ -62,7 +63,7 @@ async function main(){
     const ledger=new Ledger(config.home,config.token);await ledger.load();
     runLog=await createRunLog(config.home,{jsonConsole:process.env.M365_RELAY_JSON_LOGS==='1'});
     const log=record=>runLog.log(record);
-    server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log,selectModel:selectThinkDeeper}),ledger,log});
+    server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log,selectModel:selectThinkDeeper,attachImages:attachRequestImages}),ledger,log});
     const shutdown=async()=>{await server.stop();await runLog.flush();await unlock();process.exit(0);};
     process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(config.port,'127.0.0.1',resolve);});
