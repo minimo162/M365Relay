@@ -5,8 +5,8 @@ import { parseEnvelope } from './protocol.mjs';
 import { assert, BridgeError, delay, abortReason } from './errors.mjs';
 
 export class M365Backend {
-  constructor(config,{connect=connectOwnedBrowser,editorStableMs=1000,inputSettleMs=8000,inputPollMs=75,inputStableMs=250,sendReadyMs=15000,sendReadyStableMs=250,onMetrics=()=>{},responsePollMs=config.pollIntervalMs,responseStableMs=config.stableMs}={}){
-    this.config=config;this.connect=connect;this.onMetrics=onMetrics;
+  constructor(config,{connect=connectOwnedBrowser,selectModel,editorStableMs=1000,inputSettleMs=8000,inputPollMs=75,inputStableMs=250,sendReadyMs=15000,sendReadyStableMs=250,onMetrics=()=>{},responsePollMs=config.pollIntervalMs,responseStableMs=config.stableMs}={}){
+    this.config=config;this.connect=connect;this.onMetrics=onMetrics;this.selectModel=selectModel;
     this.inputTiming={editorStableMs,inputSettleMs,inputPollMs,inputStableMs,sendReadyMs,sendReadyStableMs};
     this.responseTiming={responsePollMs,responseStableMs};
   }
@@ -88,6 +88,7 @@ export class M365Backend {
         do {await delay(config.pollIntervalMs,signal);state=await evaluate('snapshot');if(state.editor&&!state.nonempty&&!state.input.trim()&&!state.busy)break;}while(Date.now()<resetDeadline);
       }
       assert(state.editor&&!state.nonempty&&!state.input.trim()&&!state.busy,'conversation_not_empty','会話の初期化を確認できません。送信を停止します。',409);
+      if(this.selectModel){enter('model_select');await this.selectModel({browser,sessionId,config,signal});}
       // M365 can replace an already visible editor after document load. Wait on
       // the actual node identity, not just presence or document.readyState.
       enter('editor_stable');
@@ -126,6 +127,7 @@ export class M365Backend {
           await delay(inputPollMs,signal);
         }while(true);
       }
+      if(this.selectModel)await this.selectModel({browser,sessionId,config,signal,verifyOnly:true});
       enter('before_send');await onBeforeSend();sent=true; // Conservative: the following click may succeed even if its result is lost.
       enter('send');const clicked=await evaluate('send',{expected:request.prompt});
       if(clicked.input&&!clicked.input.matched)throw inputFailure('input_changed',clicked.input,request.prompt.length);

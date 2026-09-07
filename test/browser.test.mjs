@@ -49,11 +49,23 @@ function fixture({origin=config.origin,oldReply='',dropInput=false,wrongReply=fa
   };
   return {events,state,editor,reply,nodes,context,browser};
 }
-async function execute(f,{signal=AbortSignal.timeout(1500),onMetrics}={}){
+async function execute(f,{signal=AbortSignal.timeout(1500),onMetrics,selectModel}={}){
   const request=prepareRequest({model:MODEL,messages:[{role:'user',content:'test'}]},'test template');f.state.requestId=request.requestId;
-  const backend=new M365Backend(config,{connect:async()=>f.browser,editorStableMs:3,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3,onMetrics});
+  const backend=new M365Backend(config,{connect:async()=>f.browser,selectModel,editorStableMs:3,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3,onMetrics});
   return backend.complete(request,{signal,onBeforeSend:async()=>f.events.push('journaled-before-send')});
 }
+
+test('model failure before selection or final send never sends or journals a request',async()=>{
+ for(const finalCheck of [false,true]){
+  const f=fixture();
+  await assert.rejects(execute(f,{selectModel:async({verifyOnly=false})=>{
+   if(verifyOnly===finalCheck)throw new Error('model changed');
+  }}));
+  assert.equal(f.state.sent,0);
+  assert(!f.events.includes('journaled-before-send'));
+  if(!finalCheck)assert(!f.events.includes('Input.insertText'));
+ }
+});
 test('CDP endpoint requires exact loopback port and browser path',()=>{
   assert.equal(assertWsUrl('ws://127.0.0.1:9336/devtools/browser/abc-123',9336),'ws://127.0.0.1:9336/devtools/browser/abc-123');
   for(const url of ['ws://evil.example:9336/devtools/browser/a','ws://127.0.0.1:9337/devtools/browser/a','ws://127.0.0.1:9336/devtools/page/a','ws://u:p@127.0.0.1:9336/devtools/browser/a'])assert.throws(()=>assertWsUrl(url,9336),{code:'untrusted_cdp'});

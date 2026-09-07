@@ -43,6 +43,8 @@ GitHubのCode → Download ZIP / Source code (zip)はNode.jsを含まないた�
 2. 専用EdgeでM365へ手動サインインします。VS Codeの初回案内では「Continue without Signing In」を選べます。GitHubへのサインインは不要です。
 3. VS CodeのチャットでM365Relayを選び、依頼を入力します。エージェントの操作の承認は画面で確認します。
 
+Copilot側は、新しい会話を開くたびに`GPT 5.6 Think Deeper`を画面で選択し、選択状態を確認してから送信します。このモデルが利用できない場合は送信前に停止します。モデル変更による正確性・速度の改善は比較検証中です。
+
 接続キーのコピーやJSON編集は不要です。通常のVS Code設定は変更せず、M365Relay専用のユーザーデータを使います。
 専用VS Codeではワークスペース信頼を無効化して起動します。この専用環境で開くすべてのフォルダーが対象で、Restricted Modeによる制限はありません。エージェントの操作承認設定は変更しません。
 モデル選択にAutoしか表示されない場合は、Manage Modelsを一度開いてからM365Relayを選びます。

@@ -10,6 +10,7 @@ import { connectOwnedBrowser } from './cdp.mjs';
 import { BridgeError, publicError, assert } from './errors.mjs';
 import { findVSCode,prepareDesktop,launchDesktop } from './desktop.mjs';
 import { createRunLog } from './run-log.mjs';
+import { selectThinkDeeper } from './model-selection.mjs';
 async function openEdge(config){
   assert(process.platform==='win32','windows_required','専用Edgeの自動起動はWindows用です。');
   // Never silently reuse an unrelated debugging port/profile.
@@ -61,7 +62,7 @@ async function main(){
     const ledger=new Ledger(config.home,config.token);await ledger.load();
     runLog=await createRunLog(config.home,{jsonConsole:process.env.M365_RELAY_JSON_LOGS==='1'});
     const log=record=>runLog.log(record);
-    server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log}),ledger,log});
+    server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log,selectModel:selectThinkDeeper}),ledger,log});
     const shutdown=async()=>{await server.stop();await runLog.flush();await unlock();process.exit(0);};
     process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(config.port,'127.0.0.1',resolve);});
