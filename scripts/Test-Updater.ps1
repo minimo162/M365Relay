@@ -17,7 +17,13 @@ if (-not $SecondZip) {
     [IO.File]::WriteAllText($manifestFile, ($fixtureManifest | ConvertTo-Json -Depth 12), (New-Object Text.UTF8Encoding($false)))
     $SecondZip = Join-Path $trial ("M365Relay-$($fixtureManifest.version)-win-x64-ffffffffffff.zip")
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    [IO.Compression.ZipFile]::CreateFromDirectory($fixture,$SecondZip)
+    $fixtureZip=[IO.Compression.ZipFile]::Open($SecondZip,[IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Get-ChildItem -LiteralPath $fixture -Recurse -File -Force | ForEach-Object {
+            $name=$_.FullName.Substring($fixture.Length+1).Replace('\','/')
+            $null=[IO.Compression.ZipFileExtensions]::CreateEntryFromFile($fixtureZip,$_.FullName,$name)
+        }
+    } finally { $fixtureZip.Dispose() }
 }
 [IO.File]::WriteAllText((Join-Path $userRoot 'user-work.txt'),'keep user work')
 $userHash=(Get-FileHash (Join-Path $userRoot 'user-work.txt')).Hash

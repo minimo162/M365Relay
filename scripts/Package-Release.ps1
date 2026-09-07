@@ -92,7 +92,15 @@ try {
     $zipName = "M365Relay-$($package.version)-win-x64-$($revision.Substring(0,12)).zip"
     $zipPath = Join-Path $OutputDirectory $zipName
     if (Test-Path -LiteralPath $zipPath) { throw 'Distribution ZIP already exists; use a new output directory.' }
-    [IO.Compression.ZipFile]::CreateFromDirectory($stage, $zipPath, [IO.Compression.CompressionLevel]::Optimal, $false)
+    # .NET Framework on PowerShell 5.1 otherwise writes backslash entry names.
+    # Emit portable forward-slash names explicitly for the checked updater.
+    $distributionZip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Get-ChildItem -LiteralPath $stage -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
+            $entryName = $_.FullName.Substring($stage.Length + 1).Replace('\','/')
+            $null = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($distributionZip, $_.FullName, $entryName, [IO.Compression.CompressionLevel]::Optimal)
+        }
+    } finally { $distributionZip.Dispose() }
     $digest = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
     [IO.File]::WriteAllText("$zipPath.sha256", "$digest  $zipName`n", (New-Object Text.UTF8Encoding($false)))
     Write-Output $zipPath

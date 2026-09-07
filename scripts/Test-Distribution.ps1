@@ -10,6 +10,9 @@ $gitExecutable = (Get-Command git -ErrorAction Stop).Source
 try {
     $null = New-Item -ItemType Directory -Path $temp
     $app = Join-Path $temp 'App with spaces'
+    $archiveCheck=[IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $ZipPath).Path)
+    try { if (@($archiveCheck.Entries | Where-Object { $_.FullName.Contains('\') }).Count) { throw 'Distribution ZIP contains non-portable backslash paths.' } }
+    finally { $archiveCheck.Dispose() }
     [IO.Compression.ZipFile]::ExtractToDirectory((Resolve-Path -LiteralPath $ZipPath).Path, $app)
     $env:PATH = "$env:SystemRoot\system32;$env:SystemRoot"
     $env:M365_RELAY_HOME = Join-Path $temp 'User state'
