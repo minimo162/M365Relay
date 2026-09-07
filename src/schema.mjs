@@ -2,7 +2,8 @@ import { assert, BridgeError } from './errors.mjs';
 import { isObject, canonical } from './json.mjs';
 // Explicit supported JSON Schema subset. Unknown validation keywords fail BEFORE sending.
 // Annotation-only keywords do not constrain values; they are preserved in the prompt.
-const ANNOTATIONS = new Set(['$schema','$id','$comment','title','description','markdownDescription','default','examples','deprecated','readOnly','writeOnly']);
+const ENUM_ANNOTATIONS = ['enumDescriptions','markdownEnumDescriptions','enumItemLabels'];
+const ANNOTATIONS = new Set([...ENUM_ANNOTATIONS,'$schema','$id','$comment','title','description','markdownDescription','default','examples','deprecated','readOnly','writeOnly']);
 const KEYS = new Set(['$ref','$defs','definitions','type','properties','required','additionalProperties','patternProperties','propertyNames',
   'minProperties','maxProperties','dependentRequired','dependentSchemas','dependencies','items','prefixItems','additionalItems','minItems','maxItems','uniqueItems',
   'contains','minContains','maxContains','minLength','maxLength','pattern','minimum','maximum','exclusiveMinimum','exclusiveMaximum','multipleOf',
@@ -11,7 +12,14 @@ const TYPES = new Set(['object','array','string','number','integer','boolean','n
 const numKeys = ['minProperties','maxProperties','minItems','maxItems','minContains','maxContains','minLength','maxLength'];
 const schemaMaps = ['properties','patternProperties','$defs','definitions','dependentSchemas'];
 const schemaSingles = ['additionalProperties','propertyNames','additionalItems','contains','not','if','then','else'];
-function bad() { throw new BridgeError('unsupported_schema', '未対応または不正なJSON Schemaです。制約を無視せず送信前に停止しました。'); }
+// Report only known schema vocabulary, never arbitrary keys, values, descriptions or examples.
+const DIAGNOSTIC_KEYS = new Set([...KEYS, ...ANNOTATIONS, 'format', '$anchor', '$dynamicRef', '$dynamicAnchor',
+  '$vocabulary', 'unevaluatedProperties', 'unevaluatedItems', 'contentEncoding', 'contentMediaType', 'contentSchema', 'nullable']);
+function bad(keyword) {
+  const label = typeof keyword === 'string' && DIAGNOSTIC_KEYS.has(keyword) ? keyword : 'unknown_or_invalid';
+  throw new BridgeError('unsupported_schema', `未対応または不正なJSON Schemaです（項目: ${label}）。制約を無視せず送信前に停止しました。`,
+    400, { schema_keyword: label });
+}
 function localRef(root, ref) {
   if (ref === '#') return root;
   if (typeof ref !== 'string' || !ref.startsWith('#/')) bad();
@@ -22,17 +30,18 @@ function localRef(root, ref) {
   }
   return out;
 }
-export function compileSchema(root) {
+function compileSupportedSchema(root) {
   const checked = new Set(); let count = 0;
   function inspect(s, depth = 0) {
     if (typeof s === 'boolean') return;
     if (!isObject(s) || depth > 48 || ++count > 10000) bad();
     if (checked.has(s)) return; checked.add(s);
-    for (const key of Object.keys(s)) if (!KEYS.has(key) && !ANNOTATIONS.has(key)) bad();
+    for (const key of Object.keys(s)) if (!KEYS.has(key) && !ANNOTATIONS.has(key)) bad(key);
+    for (const key of ENUM_ANNOTATIONS) if (s[key] !== undefined && (!Array.isArray(s[key]) || s[key].some(x => typeof x !== 'string'))) bad(key);
     if (s.$schema !== undefined && !['http://json-schema.org/draft-07/schema#','https://json-schema.org/draft-07/schema',
-      'https://json-schema.org/draft/2019-09/schema','https://json-schema.org/draft/2020-12/schema'].includes(s.$schema)) bad();
+      'https://json-schema.org/draft/2019-09/schema','https://json-schema.org/draft/2020-12/schema'].includes(s.$schema)) bad('$schema');
     // $id rebasing is deliberately not supported; local references always refer to this schema.
-    if (s.$id !== undefined) bad();
+    if (s.$id !== undefined) bad('$id');
     if (s.$ref !== undefined) inspect(localRef(root, s.$ref), depth + 1);
     if (s.type !== undefined && !(Array.isArray(s.type) ? s.type.length > 0 && s.type.every(t => TYPES.has(t)) : TYPES.has(s.type))) bad();
     if (s.required !== undefined && (!Array.isArray(s.required) || s.required.some(x => typeof x !== 'string') || new Set(s.required).size !== s.required.length)) bad();
@@ -127,4 +136,18 @@ export function compileSchema(root) {
     return true;
   }
   return value => valid(root, value, 0);
+}
+
+/** Add the source of an unsupported definition without serializing the schema itself. */
+export function compileSchema(root, { toolName, source = 'schema' } = {}) {
+  try { return compileSupportedSchema(root); }
+  catch (error) {
+    if (!(error instanceof BridgeError) || error.code !== 'unsupported_schema') throw error;
+    const name = typeof toolName === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(toolName) ? toolName : undefined;
+    const location = name ? `ツール「${name}」` : source === 'response_format' ? 'response_format' : 'schema';
+    throw new BridgeError(error.code, `${location}: ${error.message}`, error.status, {
+      ...error.details, schema_source: name ? 'tool' : source === 'response_format' ? 'response_format' : 'schema',
+      ...(name ? { tool_name: name } : {})
+    });
+  }
 }
