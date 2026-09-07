@@ -37,6 +37,11 @@ try {
     foreach ($doc in @('schema-compatibility.md','input-compatibility.md','release-notes.md','test-results.md','sources.md')) {
         if (-not (Test-Path -LiteralPath (Join-Path $app "docs\$doc"))) { throw "Distribution document missing: $doc" }
     }; $checks++
+    # Exercise native document runtimes with the actual bundled Node, no PATH Node.
+    $env:NODE_OPTIONS=$null
+    & (Join-Path $app 'runtime\node.exe') (Join-Path $PSScriptRoot 'Test-DocumentRuntime.mjs') $app $temp
+    if ($LASTEXITCODE -ne 0) { throw 'Bundled document runtime verification failed.' }; $checks++
+    $env:NODE_OPTIONS='--definitely-invalid-inherited-option'
     # Deliberately remove the runtime. A global fallback must never succeed.
     $node = Join-Path $app 'runtime\node.exe'
     if (-not ([IO.Path]::GetFullPath($node)).StartsWith(([IO.Path]::GetFullPath($temp) + [IO.Path]::DirectorySeparatorChar), [StringComparison]::OrdinalIgnoreCase)) { throw 'Runtime fixture is outside the test directory.' }
