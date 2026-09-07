@@ -37,4 +37,6 @@ test('Windows smoke test removes PATH Node and covers damaged bundles',async()=>
   const s=await read('scripts/Test-Distribution.ps1');
   for(const marker of ['App with spaces','Missing bundled runtime was accepted','Corrupt application was accepted','Corrupt runtime was accepted','Repeated init changed']) assert.ok(s.includes(marker));
   assert.match(s,/definitely-invalid-inherited-option/);
+  assert.match(s,/Corrupt runtime fixture/);
+  assert.doesNotMatch(s,/\[IO\.File\]::Open\(\$node/);
 });

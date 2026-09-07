@@ -2,6 +2,7 @@
 [CmdletBinding()]
 param([string]$NodeArchive, [string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version 2.0
 $root = Split-Path -Parent $PSScriptRoot
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $root 'dist' }
@@ -23,7 +24,7 @@ try {
     if (-not $NodeArchive) {
         $NodeArchive = Join-Path $work $lock.archive
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -UseBasicParsing -Uri $lock.url -OutFile $NodeArchive
+        Invoke-WebRequest -UseBasicParsing -Uri $lock.url -OutFile $NodeArchive -TimeoutSec 180
     }
     if ((Get-FileHash -LiteralPath $NodeArchive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lock.sha256) { throw 'Node.js archive SHA-256 does not match the committed official checksum.' }
     $stage = Join-Path $work 'M365Relay'
