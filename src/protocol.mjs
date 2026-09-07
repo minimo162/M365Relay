@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { assert, BridgeError } from './errors.mjs';
 import { strictJson, isObject, exactKeys } from './json.mjs';
 import { compileSchema } from './schema.mjs';
+import {decodeImagePart} from './image-input.mjs';
 export const PROTOCOL = 'm365-relay.v1';
 export const MODEL = 'm365-copilot-ui';
 const transportReminder=String.raw`応答の最終確認: ツール引数のjson-stringではUnicodeエスケープを使います。
@@ -13,11 +14,16 @@ const transportReminder=String.raw`応答の最終確認: ツール引数のjson
 作業依頼では、利用者が必須にした未実施の確認・処理を、今回のツールで実行できるなら次のツールを選びます。「未確認」と書くことは必須作業の代わりになりません。
 中止・状況報告・会話要約だけを求める今回の要求はその指定を優先します。実際の拒否・権限不足・情報不足・tool_choice制約で続行できない場合は理由を最終回答します。`;
 const toolName = /^[A-Za-z0-9_.:-]{1,128}$/;
-function textContent(c) {
+function textContent(c,context,images,allowImages) {
   if (c === null || c === undefined) return null;
   if (typeof c === 'string') return c;
-  assert(Array.isArray(c) && c.every(p => isObject(p) && p.type === 'text' && typeof p.text === 'string'), 'text_only', '初版はテキストのみです。画像・音声・バイナリは黙って捨てません。');
-  return c.map(p => ({ type: 'text', text: p.text }));
+  assert(Array.isArray(c), 'text_only', '未対応のコンテンツです。');
+  return c.map((p,partIndex)=>{
+    assert(isObject(p),'text_only','未対応のコンテンツです。');
+    if(p.type==='text'&&typeof p.text==='string')return {type:'text',text:p.text};
+    assert(allowImages&&p.type==='image_url','text_only','画像搬送は未有効です。画像・音声・バイナリは黙って捨てません。');
+    return decodeImagePart(p,{...context,partIndex},images);
+  });
 }
 
 function toolRoundInfo(messages) {
@@ -36,7 +42,7 @@ function toolRoundInfo(messages) {
   }
   return {total,terminal};
 }
-export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, model = MODEL } = {}) {
+export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, model = MODEL, allowImages=false } = {}) {
   assert(isObject(body) && body.model === model, 'unknown_model', '設定済みのモデル ID を指定してください。');
   assert(Array.isArray(body.messages) && body.messages.length > 0 && body.messages.length <= 512, 'messages_required', 'messages が必要です（最大512件）。');
   assert(body.n === undefined || body.n === 1, 'unsupported_n', 'n=1 のみ対応しています。');
@@ -44,9 +50,10 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, 
   assert(body.stop === undefined || body.stop === null || Array.isArray(body.stop) && body.stop.length === 0, 'unsupported_stop', 'stop による JSON の途中切断には対応していません。');
   assert(!body.functions && !body.function_call, 'legacy_functions', '旧式の functions ではなく tools を使用してください。');
   assert(!body.modalities || body.modalities.length === 1 && body.modalities[0] === 'text', 'text_only', 'テキストのみ対応しています。');
-  const messages = body.messages.map(m => {
+  const images=[];
+  const messages = body.messages.map((m,messageIndex) => {
     assert(isObject(m) && ['system','developer','user','assistant','tool'].includes(m.role), 'invalid_role', '未対応のメッセージ role です。');
-    const out = { role: m.role, content: textContent(m.content) };
+    const out = { role: m.role, content: textContent(m.content,{messageIndex,role:m.role},images,allowImages) };
     if (m.name !== undefined) { assert(typeof m.name === 'string', 'invalid_name', 'name は文字列です。'); out.name = m.name; }
     if (m.role === 'tool') { assert(typeof m.tool_call_id === 'string' && m.tool_call_id.length > 0, 'missing_call_id', 'tool の tool_call_id が必要です。'); out.tool_call_id = m.tool_call_id; }
     if (m.tool_calls !== undefined) {
@@ -104,7 +111,7 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, 
   const promptLimit=Math.min(maxPromptChars,120000);
   if(prompt.length>promptLimit)throw new BridgeError('context_too_large', '会話とツール定義が入力上限を超えました。会話を圧縮するか、選択ツールを減らしてください。本文は切り捨てず、M365への送信前に停止しました。', 413,
     {prompt_chars:prompt.length,max_prompt_chars:promptLimit});
-  return { body, payload, prompt, requestId, validators, finalValidator, model, stream:body.stream === true, toolBudget };
+  return { body, payload, prompt, images, requestId, validators, finalValidator, model, stream:body.stream === true, toolBudget };
 }
 
 function normalizeInvalidWindowsPathStrings(text) {

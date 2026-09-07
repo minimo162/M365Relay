@@ -11,6 +11,7 @@ export class M365Backend {
     this.responseTiming={responsePollMs,responseStableMs};
   }
   async complete(request,{signal,onBeforeSend}) {
+    assert(!request.images?.length,'image_transport_unavailable','画像添付の搬送はまだ有効ではありません。画像を省略して送信することはしません。',400);
     const config=this.config;let browser,targetId,sessionId,sent=false,success=false,failure,phase = 'connect';
     const started=performance.now();let phaseStarted=started,snapshots=0,firstReplyMs=null,lastReplyChangeMs=null;
     const durations={};
