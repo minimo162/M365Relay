@@ -43,3 +43,11 @@
 入力JSONの後ろに、Unicodeエスケープの具体例（矢印と実体参照リテラルの違い）を示す検証用指示を置いた3回は、すべて完全一致した。今回は回答DOMのjson-string自体がUnicodeエスケープを使っていた。記録は `.local/input-events/entity-tail-results.json`、session14362正常終了。
 
 prepareRequestに末尾確認文を組み込んだ。検証用はecho_source専用のツール出力指示だったが、製品版はtool_choice/response_formatと通常の最終回答も維持する文言に調整したため、製品版そのものの実M365再検証は残る。確認文を含めた総文字数に120000上限を適用する。単体117件と構文25JS/4JSON成功。短い3回の一致を長文編集での信頼性とは扱わない。
+
+## 実装版の短文実M365検証
+
+808f8f2のprepareRequestを追加指示なしで使用した同じ試験3回は完全一致。backend時間11367/12878/11179msで、いずれも回答DOMにUnicodeエスケープを確認した。`tool_choice:none`の通常の最終回答も9507msで指定した数字に完全一致。
+
+記録: `.local/input-events/entity-production-footer-results.json`、`footer-final-result.json`。試験session73321正常終了。既存サーバーPID42708の終了を確認してから更新し、現サーバーPID40848、exec31316で待受。ソース検証版であり配布ZIPではない。
+
+短い文字列での安定性は改善した兆候があるが、まだ実VS Codeの長い要求・複数ファイル編集での再検証が必要。全体の速度、圧縮の頻度、編集後検証の正しさ、配布導線の完了条件は残る。
