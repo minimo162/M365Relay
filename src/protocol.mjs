@@ -11,6 +11,21 @@ function textContent(c) {
   assert(Array.isArray(c) && c.every(p => isObject(p) && p.type === 'text' && typeof p.text === 'string'), 'text_only', '初版はテキストのみです。画像・音声・バイナリは黙って捨てません。');
   return c.map(p => ({ type: 'text', text: p.text }));
 }
+
+function toolRoundInfo(messages) {
+  let start=0;
+  for(let i=messages.length-1;i>=0;i--){
+    if(messages[i]?.role==='user'){start=i+1;break;}
+  }
+  let total=0,terminal=0;
+  for(let i=start;i<messages.length;i++){
+    const m=messages[i];
+    if(m?.role!=='assistant'||!Array.isArray(m.tool_calls))continue;
+    total+=m.tool_calls.length;
+    for(const c of m.tool_calls)if(c?.function?.name==='run_in_terminal')terminal++;
+  }
+  return {total,terminal};
+}
 export function prepareRequest(body, promptTemplate, { maxPromptChars = 180000, model = MODEL } = {}) {
   assert(isObject(body) && body.model === model, 'unknown_model', '設定済みのモデル ID を指定してください。');
   assert(Array.isArray(body.messages) && body.messages.length > 0 && body.messages.length <= 512, 'messages_required', 'messages が必要です（最大512件）。');
@@ -34,7 +49,6 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 180000, 
     }
     return out;
   });
-  // Every tool result must match an outstanding call. Never relabel data as a user message.
   const pending = new Set(); const seen = new Set();
   for (const m of messages) {
     if (m.role === 'tool') { assert(pending.delete(m.tool_call_id), 'orphan_tool_result', '対応する呼び出しのないツール結果があります。'); continue; }
@@ -66,6 +80,8 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 180000, 
     finalValidator = compileSchema(format.json_schema.schema, { source: 'response_format' });
   }
   const requestId = randomUUID();
+  const toolRounds = toolRoundInfo(messages);
+  const toolBudget = { totalUsed:toolRounds.total, terminalUsed:toolRounds.terminal, maxTotal:12, maxTerminal:3 };
   const payload = {
     protocol:PROTOCOL, request_id:requestId, messages, tools, tool_choice:choice,
     response_format:format, max_tool_calls_per_response:1,
@@ -73,14 +89,183 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 180000, 
   };
   const prompt = `${promptTemplate.trim()}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${JSON.stringify(payload)}\n`;
   assert(prompt.length <= maxPromptChars, 'context_too_large', '会話とツール定義が入力上限を超えました。自動で切り捨てません。利用ツールや対象範囲を減らしてください。', 413);
-  return { body, payload, prompt, requestId, validators, finalValidator, model, stream:body.stream === true };
+  return { body, payload, prompt, requestId, validators, finalValidator, model, stream:body.stream === true, toolBudget };
 }
+
+function normalizeInvalidWindowsPathStrings(text) {
+  let out='',i=0,changed=false;
+  while(i<text.length){
+    if(text[i]!=="\""){out+=text[i++];continue;}
+    const start=i;let j=i+1,raw='',closed=false;
+    while(j<text.length){
+      const c=text[j];
+      if(c==="\""){closed=true;j++;break;}
+      if(c==='\\' && j+1<text.length){raw+=c+text[j+1];j+=2;continue;}
+      raw+=c;j++;
+    }
+    if(!closed){out+=text.slice(start);break;}
+    const drive=/^[A-Za-z]:\\/.test(raw);
+    const hasUnsafe=drive && /\\(?!u005c)/i.test(raw);
+    if(!hasUnsafe){out+=text.slice(start,j);i=j;continue;}
+    let fixed='';
+    for(let k=0;k<raw.length;k++){
+      if(raw[k]!=='\\'){fixed+=raw[k];continue;}
+      if(/^\\u005c/i.test(raw.slice(k,k+6))){fixed+='/';k+=5;continue;}
+      fixed+='/';
+    }
+    out+='\"'+fixed+'\"';changed=true;i=j;
+  }
+  return changed?out:text;
+}
+
+function controlLine(s) {
+  return s.replace(/\\_/g,'_');
+}
+function decodePointerSegment(s) {
+  return s.replace(/~1/g,'/').replace(/~0/g,'~');
+}
+function setPointer(root,pointer,value) {
+  assert(pointer.startsWith('/')&&pointer.length>1,'invalid_envelope','ARG path が不正です。',502);
+  const parts=pointer.slice(1).split('/').map(decodePointerSegment);
+  assert(parts.every(x=>x.length>0&&!['__proto__','prototype','constructor'].includes(x)),'invalid_envelope','ARG path が不正です。',502);
+  let cur=root;
+  for(let i=0;i<parts.length;i++){
+    const key=parts[i],last=i===parts.length-1,next=parts[i+1];
+    const index=Array.isArray(cur)?Number(key):null;
+    if(Array.isArray(cur))assert(Number.isInteger(index)&&index>=0&&String(index)===key,'invalid_envelope','配列ARG path が不正です。',502);
+    if(last){
+      if(Array.isArray(cur))assert(cur[index]===undefined,'invalid_envelope','ARG path が重複しています。',502),cur[index]=value;
+      else assert(!Object.hasOwn(cur,key),'invalid_envelope','ARG path が重複しています。',502),cur[key]=value;
+      return;
+    }
+    const makeArray=/^(0|[1-9]\d*)$/.test(next);
+    if(Array.isArray(cur)){
+      if(cur[index]===undefined)cur[index]=makeArray?[]:{};
+      assert(Array.isArray(cur[index])===makeArray,'invalid_envelope','ARG path が競合しています。',502);
+      cur=cur[index];
+    }else{
+      if(!Object.hasOwn(cur,key))cur[key]=makeArray?[]:{};
+      assert(Array.isArray(cur[key])===makeArray,'invalid_envelope','ARG path が競合しています。',502);
+      cur=cur[key];
+    }
+  }
+}
+
+function assertToolBudget(req,name) {
+  const b=req.toolBudget??{totalUsed:0,terminalUsed:0,maxTotal:12,maxTerminal:3};
+  assert(b.totalUsed<b.maxTotal,'tool_loop_detected',
+    'ツール呼び出し回数が上限に達しました。同じ処理を繰り返さず、取得済み情報と失敗理由を利用者へ説明してください。',502,
+    {stage:'tool_budget',tool_rounds:b.totalUsed,max_tool_rounds:b.maxTotal});
+  if(name==='run_in_terminal')assert(b.terminalUsed<b.maxTerminal,'tool_loop_detected',
+    'ターミナル実行を繰り返しています。同じ依存関係・コマンド方式を再試行せず、別手段へ切り替えるか利用者へ制約を説明してください。',502,
+    {stage:'tool_budget',terminal_rounds:b.terminalUsed,max_terminal_rounds:b.maxTerminal});
+}
+function parseRawTool(text,req) {
+  const head=/^BRIDGE(?:_|\\_)TOOL\s+([a-f0-9-]{36})(?:\s+|$)/i.exec(text);
+  if(!head)return null;
+  assert(head[1]===req.requestId,'invalid_envelope','tool の request_id が一致しません。',502);
+  assert(Buffer.byteLength(text,'utf8')<=1024*1024,'invalid_envelope','ツール応答が大きすぎます。',502);
+
+  let pos=head[0].length;
+  const skipWs=()=>{while(pos<text.length&&/\s/.test(text[pos]))pos++;};
+  const findEnd=(kind)=>{
+    const source={
+      content:'\\s+END(?:_|\\\\_)CONTENT(?=\\s|$)',
+      arg:'\\s+END(?:_|\\\\_)ARG(?=\\s|$)'
+    }[kind];
+    const r=new RegExp(source,'ig');
+    r.lastIndex=pos;
+    return r.exec(text);
+  };
+
+  skipWs();
+  const nm=/^NAME\s+([A-Za-z0-9_.:-]{1,128})(?=\s|$)/i.exec(text.slice(pos));
+  assert(nm,'invalid_envelope','NAME が不正です。',502);
+  const name=nm[1];
+  pos+=nm[0].length;
+
+  let content='';
+  skipWs();
+  const cm=/^CONTENT(?=\s|$)/i.exec(text.slice(pos));
+  if(cm){
+    pos+=cm[0].length;
+    const e=findEnd('content');
+    assert(e,'invalid_envelope','CONTENT 終端がありません。',502);
+    content=text.slice(pos,e.index).replace(/^\s+/,'').replace(/\s+$/,'');
+    pos=e.index+e[0].length;
+  }
+
+  const args={};let count=0;
+  for(;;){
+    skipWs();
+    const tail=/^END(?:_|\\_)BRIDGE(?:_|\\_)TOOL(?=\s*$)/i.exec(text.slice(pos));
+    if(tail){pos+=tail[0].length;break;}
+
+    const hm=/^ARG\s+(\/\S+)\s+(string|number|integer|boolean|null|object|array|json)(?=\s|$)/i.exec(text.slice(pos));
+    assert(hm,'invalid_envelope','ARG ヘッダーが不正です。',502);
+    pos+=hm[0].length;
+
+    const e=findEnd('arg');
+    assert(e,'invalid_envelope','ARG 終端がありません。',502);
+    let raw=text.slice(pos,e.index).replace(/^\s+/,'').replace(/\s+$/,'');
+
+    let value;
+    const type=hm[2].toLowerCase();
+    if(type==='string')value=raw;
+    else if(type==='null'){assert(raw===''||raw==='null','invalid_envelope','null ARG が不正です。',502);value=null;}
+    else if(type==='boolean'){assert(/^(true|false)$/.test(raw),'invalid_envelope','boolean ARG が不正です。',502);value=raw==='true';}
+    else if(type==='integer'){assert(/^-?(0|[1-9]\d*)$/.test(raw),'invalid_envelope','integer ARG が不正です。',502);value=Number(raw);assert(Number.isSafeInteger(value),'invalid_envelope','integer ARG が範囲外です。',502);}
+    else if(type==='number'){assert(/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(raw),'invalid_envelope','number ARG が不正です。',502);value=Number(raw);assert(Number.isFinite(value),'invalid_envelope','number ARG が範囲外です。',502);}
+    else if(type==='object'){assert(raw===''||raw==='{}','invalid_envelope','object ARG は空オブジェクトのみ直接指定できます。',502);value={};}
+    else if(type==='array'){assert(raw===''||raw==='[]','invalid_envelope','array ARG は空配列のみ直接指定できます。',502);value=[];}
+    else value=strictJson(raw,{maxBytes:256*1024});
+
+    setPointer(args,hm[1],value);
+    count++;
+    assert(count<=256,'invalid_envelope','ARG が多すぎます。',502);
+    pos=e.index+e[0].length;
+  }
+
+  assert(text.slice(pos).trim()==='','invalid_envelope','ツール応答の終端後に余分な内容があります。',502);
+  assertToolBudget(req,name);
+  const choice=req.payload.tool_choice;
+  assert(choice!=='none'&&req.validators.has(name),'tool_choice_violation','今回はこのツール呼び出しを受理できません。',502);
+  assert(!isObject(choice)||choice.function.name===name,'tool_choice_violation','指定されたツール名と一致しません。',502);
+  assert(req.validators.get(name)(args),'invalid_tool_arguments','引数がVS Codeから渡されたJSON Schemaに適合しません。',502);
+  return {protocol:PROTOCOL,request_id:req.requestId,action:'tool_calls',content,tool_calls:[{name,arguments:args}],complete:true};
+}
+
 export function parseEnvelope(raw, req) {
-  // Only an exact surrounding JSON code fence is tolerated; never salvage a substring or add braces.
   let text = raw.trim();
+
+  const rawTool=parseRawTool(text,req);
+  if(rawTool)return rawTool;
+
+  const finalHead=/^BRIDGE(?:_|\\_)FINAL\s+([a-f0-9-]{36})(?:(?:[ \t]*\n)|[ \t]+|$)/i.exec(text);
+  if(finalHead){
+    assert(finalHead[1]===req.requestId,'invalid_envelope','final の request_id が一致しません。',502);
+    const content=text.slice(finalHead[0].length);
+    const choice=req.payload.tool_choice;
+    assert(content.trim().length>0,'invalid_envelope','final の内容が空です。',502);
+    assert(choice!=='required'&&!isObject(choice),'tool_choice_violation','この要求では final を返せません。',502);
+    if(req.payload.response_format.type!=='text'){
+      const data=strictJson(content);
+      assert(req.payload.response_format.type!=='json_object'||isObject(data),'invalid_final_format','content はJSONオブジェクトである必要があります。',502);
+      assert(!req.finalValidator||req.finalValidator(data),'invalid_final_format','content が要求されたJSON Schemaに適合しません。',502);
+    }
+    return {protocol:PROTOCOL,request_id:req.requestId,action:'final',content,tool_calls:[],complete:true};
+  }
+
   const fence = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(text);
   if (fence) text = fence[1].trim();
-  const out = strictJson(text, {maxBytes:1024*1024});
+  let out;
+  try{out=strictJson(text,{maxBytes:1024*1024});}
+  catch(error){
+    if(error?.code!=='invalid_json')throw error;
+    const normalized=normalizeInvalidWindowsPathStrings(text);
+    if(normalized===text)throw error;
+    out=strictJson(normalized,{maxBytes:1024*1024});
+  }
   assert(exactKeys(out,['protocol','request_id','action','content','tool_calls','complete']), 'invalid_envelope', '回答のフィールドが出力契約と一致しません。', 502);
   assert(out.protocol === PROTOCOL && out.request_id === req.requestId && out.complete === true, 'response_mismatch', '回答ID・プロトコル・終端を照合できません。', 502);
   assert(['tool_calls','final'].includes(out.action) && typeof out.content === 'string' && Array.isArray(out.tool_calls), 'invalid_envelope', '回答の型が出力契約と一致しません。', 502);
@@ -88,6 +273,7 @@ export function parseEnvelope(raw, req) {
   if (out.action === 'tool_calls') {
     assert(choice !== 'none' && out.tool_calls.length === 1, 'tool_choice_violation', '今回はこのツール呼び出しを受理できません。', 502);
     const t = out.tool_calls[0];
+    assertToolBudget(req,t.name);
     assert(exactKeys(t,['name','arguments']) && typeof t.name === 'string' && isObject(t.arguments) && req.validators.has(t.name), 'unknown_tool', '未登録ツールまたは不正な引数形式です。', 502);
     assert(!isObject(choice) || choice.function.name === t.name, 'tool_choice_violation', '指定されたツール名と一致しません。', 502);
     assert(req.validators.get(t.name)(t.arguments), 'invalid_tool_arguments', '引数がVS Codeから渡されたJSON Schemaに適合しません。', 502);

@@ -54,7 +54,7 @@ async function main(){
     process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(config.port,'127.0.0.1',resolve);});
     const {version}=JSON.parse(await readFile(join(ROOT,'package.json'),'utf8'));
-    console.log(`M365Relay ${version} (検証用・実M365との通し動作は未検証)\nEndpoint: http://127.0.0.1:${config.port}/v1/chat/completions\n終了: Ctrl+C`);
+    console.log(`M365Relay ${version} (実M365で基本往復確認済み・ツール通し動作は検証中)\nEndpoint: http://127.0.0.1:${config.port}/v1/chat/completions\n終了: Ctrl+C`);
   }catch(error){if(server?.listening)await server.stop();await unlock();throw error;}
 }
 main().catch(error=>{console.error(JSON.stringify({error:publicError(error)}));process.exitCode=1;});

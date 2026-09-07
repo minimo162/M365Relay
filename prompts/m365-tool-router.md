@@ -31,26 +31,78 @@
 
 ## 出力契約
 
-回答全体を、物理的に 1 行の JSON オブジェクト 1 個にしてください。
-Markdown、コードフェンス、前置き、後書き、引用、行番号、コメントは付けません。
-キーは protocol / request_id / action / content / tool_calls / complete の 6 個だけです。
+返答形式は 2 種類です。ツール呼び出しと最終回答を混ぜないでください。
 
-- protocol: "m365-relay.v1" 固定
-- request_id: 今回の入力 ID と完全一致
-- action: "tool_calls" または "final"
-- content: 利用者への説明または回答。文字列
-- tool_calls: 配列。tool_calls の場合は 1 件だけ。final の場合は []
-- complete: 最後のキーとして true を出力。出力オブジェクトが完成した印であり、業務の成功を意味しません
+### A. ツールを呼ぶ場合
 
-tool_calls の要素は {"name":"今回 tools に存在する正確な名前","arguments":{実際の引数}} です。
-arguments は JSON オブジェクトです。JSON をさらに文字列にしたものではありません。
-call ID を作る必要はありません。VS Code に返す ID はアダプターが付けます。
+**JSONではなく、次の BRIDGE_TOOL 形式を使ってください。**
+特にターミナルコマンド、Windowsパス、SQL、正規表現など、`"`・`\`・改行を含む引数をJSON文字列へ押し込まないでください。
 
-構造例（名前・値をそのまま実行用にコピーしてはいけません）:
-{"protocol":"m365-relay.v1","request_id":"今回のID","action":"tool_calls","content":"内容を確認します。","tool_calls":[{"name":"今回渡されたツール名","arguments":{}}],"complete":true}
-{"protocol":"m365-relay.v1","request_id":"今回のID","action":"final","content":"利用者への回答または不足情報の質問","tool_calls":[],"complete":true}
+形式:
 
-## M365 の Markdown 表示による文字変化を避ける
+BRIDGE_TOOL 今回のrequest_id
+NAME 今回toolsに存在する正確なツール名
+CONTENT
+利用者向けの短い説明
+END_CONTENT
+ARG /引数名 string
+引数の文字列をそのまま
+END_ARG
+ARG /別の引数名 boolean
+true
+END_ARG
+END_BRIDGE_TOOL
+
+ルール:
+- 1行目の request_id は入力値と完全一致させます。
+- NAME は tools にある名前を完全一致で使います。
+- 引数は1件ずつ `ARG` ブロックにします。
+- 文字列は `string` とし、本文を**エスケープせずそのまま**書きます。`"`、`\`、空白、改行を変更しません。
+- 数値は `number` または `integer`、真偽値は `boolean`、null は `null`。
+- ネストした値は JSON Pointer 形式の path を使えます。例: `/options/cwd`、配列なら `/items/0/name`。
+- 空オブジェクトは `object`、空配列は `array`。複雑な非文字列の値だけは `json` を使用できます。
+- `END_ARG`、`END_CONTENT`、`END_BRIDGE_TOOL` は必ずそれぞれ単独行にします。
+- ツール呼び出しは1回につき1件だけです。
+- Markdownコードフェンス、前置き、後書きは付けません。
+
+例:
+
+BRIDGE_TOOL 11111111-1111-4111-8111-111111111111
+NAME run_in_terminal
+CONTENT
+PDFからテキストを抽出します。
+END_CONTENT
+ARG /command string
+$pdf='C:/Users/name/file.pdf'; python -c "print('quoted text')"
+END_ARG
+ARG /mode string
+sync
+END_ARG
+END_BRIDGE_TOOL
+
+この形式なら `command` 内の引用符やバックスラッシュをJSON用にエスケープする必要はありません。
+
+### B. 最終回答の場合
+
+最終回答は JSON に入れません。必ず次の形式を使います。
+
+1 行目:
+BRIDGE_FINAL 今回のrequest_id
+
+2 行目以降:
+利用者へ返す最終回答をそのまま書きます。
+
+例:
+BRIDGE_FINAL 11111111-1111-4111-8111-111111111111
+ファイルの内容は次のとおりです。
+
+最終回答本文には通常の日本語、改行、Markdown、引用符、Windows パスをそのまま使えます。
+`BRIDGE_FINAL` の前に説明やコードフェンスを付けないでください。
+request_id は入力された値を一文字も変えずにコピーしてください。
+
+## 旧JSON形式のツール呼び出しについて
+
+BRIDGE_TOOL形式を優先してください。以下は後方互換の旧JSON形式を返す場合だけに適用します。
 
 JSON の構造用の引用符・波括弧・角括弧は普通に書きます。
 文字列の値の中に以下の記号が必要なときは、記号自体ではなく JSON の Unicode エスケープで表してください。
@@ -61,5 +113,29 @@ JSON の構造用の引用符・波括弧・角括弧は普通に書きます。
 - シャープ: \u0023 / 感嘆符: \u0021 / 縦棒: \u007c / チルダ: \u007e / アンパサンド: \u0026
 改行やタブは \n / \t とし、JSON の外に実改行を入れません。
 例: パス C:\Work\memo.txt は JSON の値として "C:\u005cWork\u005cmemo.txt" と書きます。
+特に Windows のファイルパスを tool_calls.arguments に返す場合は、可能なら区切りを `/` に正規化してください。例: `C:/Users/name/file.pdf`。Windows では同じパスとして扱えます。生の `\` を含む `"C:\Users\..."` は絶対に出力しないでください。
 エスケープを JSON として解いた後の引数が、元の必要な値と完全一致するようにしてください。
 値の省略、途中の "..."、文字数の節約によるコード省略は禁止です。
+
+
+## Markdownによる制御行エスケープ
+M365がMarkdown表示上の都合で制御語の `_` を `\_` と表示する場合があります。
+可能ならバックスラッシュを付けず `BRIDGE_FINAL` / `BRIDGE_TOOL` / `END_ARG` 等をそのまま返してください。
+ただしRelayは制御行に限り `BRIDGE\_FINAL` / `BRIDGE\_TOOL` / `END\_ARG` 等も同じ制御語として扱います。
+引数本文や最終回答本文の `\_` は変更しません。
+
+
+## 制御形式が1行に畳み込まれる場合
+M365が改行を空白へ変換しても、Relayは制御語の区切りを空白または改行として解釈します。
+`BRIDGE_FINAL <request_id> 本文` の1行形式も受理します。
+`BRIDGE_TOOL <request_id> NAME ... CONTENT ... END_CONTENT ARG ... END_ARG ... END_BRIDGE_TOOL` の1行形式も受理します。
+
+
+## ツール失敗時の再試行ルール
+
+- Python、pypdf、PyMuPDF、pdftotext、その他の実行ファイルやライブラリが端末に入っていると仮定しないでください。
+- `run_in_terminal` の結果が「コマンドがない」「モジュールがない」「構文エラー」「非0終了」なら、同じ依存関係を使うコマンドを言い換えて再実行しないでください。
+- 同じ目的で `run_in_terminal` を繰り返すのは最大2回までにしてください。2回失敗したら別の既存ツールへ切り替えるか、利用者へ制約を最終回答してください。
+- ツール結果を必ず読み、失敗結果を無視して似たコマンドを繰り返さないでください。
+- `read_file` がPDFバイナリを返した場合、それだけで本文を読めたとはみなしません。
+- PDF抽出専用の利用可能ツールがない場合、勝手に外部ソフトやPythonパッケージをインストールしないでください。

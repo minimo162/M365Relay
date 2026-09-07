@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile, rename, unlink, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { uptime } from 'node:os';
 import { createHmac, randomUUID } from 'node:crypto';
 import { strictJson, canonical, isObject } from './json.mjs';
 import { assert, BridgeError, abortReason } from './errors.mjs';
@@ -40,8 +41,6 @@ export class Ledger {
   }
   async reserve(req) {
     const hash=this.fingerprint(req.payload), old=this.records[hash];
-    // Identical conversations cannot be distinguished from retries through Chat Completions.
-    // Block, rather than replay another conversation's answer or automatically resubmit.
     if(old && old.status!=='not_sent') throw new BridgeError('duplicate_request',
       '同じ要求は処理済み、処理中、または結果不明です。自動で再送しません。再試行が必要な場合はチャットに明示的な追加指示を書いてください。',409,
       {prior_request_id:old.id,transport_status:old.status});
@@ -50,19 +49,47 @@ export class Ledger {
   }
   async set(hash,status) { this.records[hash]={...this.records[hash],status,at:new Date().toISOString()}; await this.flush(); }
 }
-export async function acquireProcessLock(home) {
-  const path=join(home,'bridge.lock');
-  try { await mkdir(path); }
-  catch(e) { if(e.code==='EEXIST')throw new BridgeError('already_running','起動ロックが存在します。既存プロセスを確認してください。異常終了後は recover-lock コマンドを使用します。',409);throw e; }
-  await writeFile(join(path,'owner.json'),JSON.stringify({pid:process.pid,started:new Date().toISOString()}),{mode:0o600});
-  return ()=>rm(path,{recursive:true,force:true});
+function bootStartedAtMs(now=Date.now(),up=uptime()) {
+  return now-Math.max(0,up)*1000;
 }
-export async function recoverProcessLock(home) {
-  const path=join(home,'bridge.lock');
+function lockPredatesBoot(owner,{now=Date.now(),up=uptime()}={}) {
+  const started=Date.parse(owner?.started);
+  if(!Number.isFinite(started))return false;
+  return started < bootStartedAtMs(now,up)-1000;
+}
+async function readLockOwner(path) {
   let owner; try{owner=strictJson(await readFile(join(path,'owner.json'),'utf8'));}
   catch{throw new BridgeError('lock_unverifiable','ロック所有者を確認できません。手動でプロセスを確認してください。');}
   assert(Number.isInteger(owner.pid) && owner.pid>0,'lock_unverifiable','ロック所有者が不正です。');
+  assert(Number.isFinite(Date.parse(owner.started)),'lock_unverifiable','ロック作成時刻が不正です。');
+  return owner;
+}
+async function removeStaleLockAfterReboot(path) {
+  const owner=await readLockOwner(path);
+  if(!lockPredatesBoot(owner))return false;
+  await rm(path,{recursive:true,force:true});
+  return true;
+}
+export async function acquireProcessLock(home) {
+  const path=join(home,'bridge.lock');
+  for(let attempt=0;attempt<2;attempt++) {
+    try { await mkdir(path); }
+    catch(e) {
+      if(e.code!=='EEXIST')throw e;
+      if(attempt===0 && await removeStaleLockAfterReboot(path))continue;
+      throw new BridgeError('already_running','起動ロックが存在します。既存プロセスを確認してください。異常終了後は recover-lock コマンドを使用します。',409);
+    }
+    await writeFile(join(path,'owner.json'),JSON.stringify({pid:process.pid,started:new Date().toISOString()}),{mode:0o600});
+    return ()=>rm(path,{recursive:true,force:true});
+  }
+  throw new BridgeError('already_running','起動ロックを取得できません。',409);
+}
+export async function recoverProcessLock(home) {
+  const path=join(home,'bridge.lock');
+  const owner=await readLockOwner(path);
+  if(lockPredatesBoot(owner)) { await rm(path,{recursive:true,force:true}); return; }
   let running=true; try{process.kill(owner.pid,0);}catch(e){if(e.code==='ESRCH')running=false;}
   assert(!running,'process_alive','同じPIDのプロセスが存在するためロックを削除しません。',409);
   await rm(path,{recursive:true,force:true});
 }
+export { lockPredatesBoot };
