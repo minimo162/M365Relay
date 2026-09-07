@@ -74,3 +74,4 @@ $installed=Join-Path $userRoot ('app\versions\'+$second.revision+'-'+$second.sha
 Run-Update 1; $count++
 if ((Get-FileHash (Join-Path $userRoot 'user-work.txt')).Hash -cne $userHash) { throw 'User work changed.' }; $count++
 Write-Output "PASS: $count updater scenarios. Evidence retained: $trial"
+exit 0

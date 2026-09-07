@@ -66,6 +66,7 @@ jobs:
         run: |
           $zip = @(Get-ChildItem dist/*.zip)
           ./scripts/Test-Updater.ps1 -FirstZip $zip[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Updater checks failed.' }
           ./scripts/New-UpdateChannel.ps1 -ZipPath $zip[0].FullName -OutputDirectory dist/update-channel -Source https://github.com/minimo162/M365Relay/releases/latest/download/update.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
