@@ -56,6 +56,7 @@ PC再起動より前の`bridge.lock`が残っている場合は、OS起動時刻
 ## VS Codeへの手動接続（既存プロファイルを使う場合）
 
 チャット欄を広く使うには、Ctrl+Shift+Pから **Chat: Move Chat into Editor Area** を選ぶと、中央の編集領域に表示できます。この表示で日本語の入力・送信とM365Relayの応答を実機確認しています。
+Run.cmd／Setup.cmdは、専用VS Codeのエディター・チャット本文・チャット入力欄をフォントサイズ16、ウィンドウのズームレベルを1へ自動調整します。
 別ウィンドウに表示する場合は **Chat: Move Chat into New Window** を選びます。どちらも通常のチャットと同じモデル・実行方式です。
 Agents Windowは別の実行基盤を使うプレビュー機能で、M365Relay単独での通し動作はまだ確認していません。
 

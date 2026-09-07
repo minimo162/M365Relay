@@ -18,20 +18,22 @@ test('first-run setup creates an isolated usable model without modifying a norma
  const settings=JSON.parse(await readFile(join(plan.userDataDir,'User','settings.json'),'utf8'));
  assert.equal(settings['chat.byokUtilityModelDefault'],'none');
  assert.equal(settings['chat.utilityModel'],'customendpoint/m365-copilot-ui');
+ assert.equal(settings['editor.fontSize'],16);assert.equal(settings['chat.fontSize'],16);
+ assert.equal(settings['chat.editor.fontSize'],16);assert.equal(settings['window.zoomLevel'],1);
  assert.equal(await readFile(normal,'utf8'),'USER SETTINGS');
  assert.match(await readFile(join(plan.workspace,'はじめに.md'),'utf8'),/サインイン/);
 });
 
-test('repeat setup preserves other models, explicit preferences, and user workspace files',async t=>{
+test('repeat setup reapplies display settings and preserves unrelated preferences and workspace files',async t=>{
  const c=await fixture(t),p=await prepareDesktop(c);const models=join(p.userDataDir,'User','chatLanguageModels.json');
  const groups=JSON.parse(await readFile(models,'utf8'));groups.push({name:'User custom model',vendor:'other',models:[]});await writeFile(models,JSON.stringify(groups));
- await writeFile(join(p.userDataDir,'User','settings.json'),JSON.stringify({'editor.fontSize':18,'chat.byokUtilityModelDefault':'none'}));
+ await writeFile(join(p.userDataDir,'User','settings.json'),JSON.stringify({'editor.fontSize':18,'window.zoomLevel':0,'editor.wordWrap':'on','chat.byokUtilityModelDefault':'none'}));
  await writeFile(join(p.workspace,'はじめに.md'),'user-edited guide');
  await prepareDesktop({...c,port:8744,token:'b'.repeat(64)});
  const updated=JSON.parse(await readFile(models,'utf8'));assert(updated.some(g=>g.name==='User custom model'));
  const m=updated.find(g=>g.name==='M365Relay').models[0];assert.equal(m.url,'http://127.0.0.1:8744/v1/chat/completions');assert.equal(m.requestHeaders.Authorization,'Bearer '+'b'.repeat(64));
  assert.equal(await readFile(join(p.workspace,'はじめに.md'),'utf8'),'user-edited guide');
- const settings=JSON.parse(await readFile(join(p.userDataDir,'User','settings.json'),'utf8'));assert.equal(settings['editor.fontSize'],18);assert.equal(settings['chat.byokUtilityModelDefault'],'none');
+ const settings=JSON.parse(await readFile(join(p.userDataDir,'User','settings.json'),'utf8'));assert.equal(settings['editor.fontSize'],16);assert.equal(settings['window.zoomLevel'],1);assert.equal(settings['editor.wordWrap'],'on');assert.equal(settings['chat.byokUtilityModelDefault'],'none');
  const bytes=await readFile(models,'utf8');await prepareDesktop({...c,port:8744,token:'b'.repeat(64)});assert.equal(await readFile(models,'utf8'),bytes);
 });
 

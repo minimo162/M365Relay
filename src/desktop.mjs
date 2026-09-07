@@ -79,7 +79,8 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
   // the full utility model for features such as applying edits; no extra API.
   const oldGeneratedDefault=Object.keys(settings).length===1&&settings['chat.byokUtilityModelDefault']==='mainAgent';
   return {'chat.byokUtilityModelDefault':'none','chat.utilityModel':'customendpoint/m365-copilot-ui',
-    ...(oldGeneratedDefault?{}:settings)};
+    ...(oldGeneratedDefault?{}:settings),
+    'editor.fontSize':16,'chat.fontSize':16,'chat.editor.fontSize':16,'window.zoomLevel':1};
  });
  return {executable,userDataDir,workspace:actualFolder};
 }
