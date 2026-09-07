@@ -44,7 +44,7 @@ try {
     $actualVersion = & (Join-Path $runtime 'node.exe') --version
     if ($LASTEXITCODE -ne 0 -or $actualVersion -cne "v$($lock.version)") { throw 'Bundled runtime version check failed.' }
     # Curated distribution: never copy local settings, tokens, profiles, logs or npm.
-    foreach ($relative in @('src','prompts','config','README.md','THIRD_PARTY.md','Bridge.cmd','Run.cmd','Setup.cmd','Open-Copilot.cmd','Start-Bridge.cmd','package.json')) {
+    foreach ($relative in @('src','prompts','config','README.md','THIRD_PARTY.md','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd','Open-Copilot.cmd','Start-Bridge.cmd','package.json')) {
         if ($relative -in @('src','prompts','config')) {
             $null = New-Item -ItemType Directory -Force -Path (Join-Path $stage $relative)
             $pattern = if ($relative -eq 'src') { '*.mjs' } elseif ($relative -eq 'prompts') { '*.md' } else { '*.example.json' }

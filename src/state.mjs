@@ -77,7 +77,7 @@ export async function acquireProcessLock(home) {
     catch(e) {
       if(e.code!=='EEXIST')throw e;
       if(attempt===0 && await removeStaleLockAfterReboot(path))continue;
-      throw new BridgeError('already_running','起動ロックが存在します。既存プロセスを確認してください。異常終了後は recover-lock コマンドを使用します。',409);
+      throw new BridgeError('already_running','M365Relayの起動ロックがあります。動作中ならその起動ウィンドウを使用してください。異常終了後は配布フォルダーのRecover.cmdを開き、復旧に成功したらRun.cmdを開き直してください。',409);
     }
     await writeFile(join(path,'owner.json'),JSON.stringify({pid:process.pid,started:new Date().toISOString()}),{mode:0o600});
     return ()=>rm(path,{recursive:true,force:true});

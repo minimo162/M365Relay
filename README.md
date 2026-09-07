@@ -46,6 +46,8 @@ GitHubのCode → Download ZIP / Source code (zip)はNode.jsを含まないた�
 接続キーのコピーやJSON編集は不要です。通常のVS Code設定は変更せず、M365Relay専用のユーザーデータを使います。
 モデル選択にAutoしか表示されない場合は、Manage Modelsを一度開いてからM365Relayを選びます。
 既存フォルダーで始めるには、そのフォルダーをRun.cmdへドラッグするか、VS Codeで「フォルダーを開く」を選びます。
+
+異常終了後に「起動ロック」と表示される場合は、同じ配布フォルダーの`Recover.cmd`を開きます。停止済みと確認できたロックだけを取り除きます。復旧に成功したら`Run.cmd`を開き直してください。動作中または所有者を確認できない場合は停止し、設定・チャット・要求台帳は保持します。
 終了はM365Relayの起動ウィンドウでCtrl+Cです。`Setup.cmd`は設定のみ、`Start-Bridge.cmd`は接続サーバーのみの起動です。
 
 生成先は`%LOCALAPPDATA%\M365Relay`です。`M365_RELAY_HOME`で変更でき、旧`M365_BRIDGE_HOME`も互換用に受け付けます。
