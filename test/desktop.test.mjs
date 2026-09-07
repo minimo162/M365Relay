@@ -20,6 +20,9 @@ test('first-run setup creates an isolated usable model without modifying a norma
  assert.equal(settings['chat.utilityModel'],'customendpoint/m365-copilot-ui');
  assert.equal(settings['editor.fontSize'],16);assert.equal(settings['chat.fontSize'],16);
  assert.equal(settings['chat.editor.fontSize'],16);assert.equal(settings['window.zoomLevel'],1);
+ assert.equal(settings['workbench.startupEditor'],'agentSessionsWelcomePage');
+ assert.equal(settings['workbench.secondarySideBar.defaultVisibility'],'hidden');
+ assert.equal(settings['workbench.sideBar.location'],'left');
  assert.equal(await readFile(normal,'utf8'),'USER SETTINGS');
  assert.match(await readFile(join(plan.workspace,'はじめに.md'),'utf8'),/サインイン/);
 });

@@ -80,7 +80,9 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
   const oldGeneratedDefault=Object.keys(settings).length===1&&settings['chat.byokUtilityModelDefault']==='mainAgent';
   return {'chat.byokUtilityModelDefault':'none','chat.utilityModel':'customendpoint/m365-copilot-ui',
     ...(oldGeneratedDefault?{}:settings),
-    'editor.fontSize':16,'chat.fontSize':16,'chat.editor.fontSize':16,'window.zoomLevel':1};
+    'editor.fontSize':16,'chat.fontSize':16,'chat.editor.fontSize':16,'window.zoomLevel':1,
+    'workbench.startupEditor':'agentSessionsWelcomePage',
+    'workbench.secondarySideBar.defaultVisibility':'hidden','workbench.sideBar.location':'left'};
  });
  return {executable,userDataDir,workspace:actualFolder};
 }
