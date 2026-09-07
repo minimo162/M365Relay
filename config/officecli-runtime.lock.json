@@ -1,0 +1,12 @@
+{
+  "version": "1.0.148",
+  "platform": "win",
+  "arch": "x64",
+  "commit": "0a450e43389531eadf05510dff209d541c1dec1e",
+  "files": [
+    {"name":"officecli.exe","url":"https://github.com/iOfficeAI/OfficeCLI/releases/download/v1.0.148/officecli-win-x64.exe","sha256":"df91e48fa250500b05ae1043777af26857e51ed12ea75b2f7a57e3333e3813bf"},
+    {"name":"LICENSE","url":"https://raw.githubusercontent.com/iOfficeAI/OfficeCLI/0a450e43389531eadf05510dff209d541c1dec1e/LICENSE","sha256":"7e282402a5a6db33995fe638bb3fe79013f9884d8f7d15a42e481c1e86aadda1"},
+    {"name":"NOTICE","url":"https://raw.githubusercontent.com/iOfficeAI/OfficeCLI/0a450e43389531eadf05510dff209d541c1dec1e/NOTICE","sha256":"3a4715b268e148a8e9566f5e835f766f5c95c3da4d6e5ddd908806a258a2f07b"},
+    {"name":"THIRD-PARTY-NOTICES.txt","url":"https://raw.githubusercontent.com/iOfficeAI/OfficeCLI/0a450e43389531eadf05510dff209d541c1dec1e/THIRD-PARTY-NOTICES.txt","sha256":"7e79e54cddf05f25681198429eb42e1401c1c53a3b29bf63744dc09411c029d8"}
+  ]
+}

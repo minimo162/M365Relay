@@ -16,3 +16,10 @@ A hash match is not a claim that a PGP signature or Windows Authenticode signatu
 
 VS Code, Microsoft Edge, and Microsoft 365 Copilot are not redistributed by this project.
 M365Relay is an independent adapter, not an official Microsoft product or API.
+
+OfficeCLI 1.0.148 (Apache-2.0) is redistributed unmodified as a self-contained Windows
+x64 executable in `runtime/officecli`. Its LICENSE, NOTICE and THIRD-PARTY-NOTICES.txt
+are preserved there. Source: https://github.com/iOfficeAI/OfficeCLI/tree/0a450e43389531eadf05510dff209d541c1dec1e
+Executable and notice hashes are pinned in `config/officecli-runtime.lock.json`.
+Its own updater and automatic resident mode are disabled in the dedicated environment;
+M365Relay's distribution manages its version. Rendering can require an external browser.

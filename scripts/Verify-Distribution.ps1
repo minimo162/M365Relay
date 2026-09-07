@@ -28,3 +28,12 @@ foreach ($required in @('runtime/node.exe','runtime/LICENSE','src/cli.mjs','src/
 }
 if ((Get-FileHash -LiteralPath (Join-Path $root 'runtime\node.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lock.executableSha256) { throw 'Bundled Node.js does not match the official pinned executable.' }
 
+if (-not $seen.ContainsKey('config/officecli-runtime.lock.json')) { throw 'OfficeCLI runtime contract missing.' }
+$officeLock=Get-Content -LiteralPath (Join-Path $root 'config\officecli-runtime.lock.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+foreach($file in $officeLock.files) {
+    if ($file.name -cnotmatch '^[A-Za-z0-9.-]+$' -or $file.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid OfficeCLI runtime contract.' }
+    $relative='runtime/officecli/'+$file.name
+    if (-not $seen.ContainsKey($relative)) { throw "OfficeCLI manifest entry missing: $relative" }
+    if ((Get-FileHash -LiteralPath (Join-Path $root $relative) -Algorithm SHA256).Hash.ToLowerInvariant() -cne $file.sha256) { throw 'OfficeCLI does not match the pinned runtime.' }
+}
+

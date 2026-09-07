@@ -1,5 +1,5 @@
 import {readFile,writeFile,mkdir,rename,unlink,stat,access,realpath} from 'node:fs/promises';
-import {join,resolve} from 'node:path';
+import {join,resolve,dirname} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
@@ -34,6 +34,9 @@ export async function findVSCode({env=process.env,exists=access}={}){
 
 export async function prepareDesktop(config,{workspace,executable,resolveRealPath=realpath,runtimeExecutable=process.execPath}={}){
  runtimeExecutable=await realpath(runtimeExecutable);
+ let officeExecutable;
+ const officeCandidate=join(dirname(runtimeExecutable),'officecli','officecli.exe');
+ try{officeExecutable=await realpath(officeCandidate);}catch(error){if(error.code!=='ENOENT')throw error;}
  // This is a dedicated --user-data-dir, not the user's normal VS Code profile.
  const userDataDir=join(config.home,'vscode-data');
  const userDir=join(userDataDir,'User');
@@ -88,7 +91,8 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
     'workbench.secondarySideBar.defaultVisibility':'maximized','workbench.sideBar.location':'left',
     'chat.viewSessions.enabled':true,'chat.viewSessions.orientation':'sideBySide',
     'security.workspace.trust.enabled':false,
-    'terminal.integrated.env.windows':{...terminalEnv,M365_RELAY_NODE:runtimeExecutable}};
+    'terminal.integrated.env.windows':{...terminalEnv,M365_RELAY_NODE:runtimeExecutable,
+      ...(officeExecutable?{M365_RELAY_OFFICECLI:officeExecutable,OFFICECLI_SKIP_UPDATE:'1',OFFICECLI_NO_AUTO_RESIDENT:'1',OFFICECLI_RESIDENT_FLUSH:'each'}:{})}};
  });
  // Pin the actual profile directory as well as the workspace. Packaged Windows
  // launchers may redirect AppData; a VS Code self-restart can otherwise resolve
@@ -97,7 +101,7 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
  try{actualUserDataDir=await realpath(userDataDir);}catch{
   throw new BridgeError('profile_resolution_failed','専用VS Code設定の実際の保存先を確認できません。起動せず停止しました。',400);
  }
- return {executable,userDataDir:actualUserDataDir,workspace:actualFolder,runtimeExecutable};
+ return {executable,userDataDir:actualUserDataDir,workspace:actualFolder,runtimeExecutable,officeExecutable};
 }
 
 export async function launchDesktop(plan,{spawnProcess=spawn}={}){
@@ -105,6 +109,7 @@ export async function launchDesktop(plan,{spawnProcess=spawn}={}){
  const env={...process.env};
  for(const name of ['ELECTRON_RUN_AS_NODE','VSCODE_IPC_HOOK_CLI','NODE_OPTIONS','NODE_PATH'])delete env[name];
  if(plan.runtimeExecutable)env.M365_RELAY_NODE=plan.runtimeExecutable;
+ if(plan.officeExecutable)Object.assign(env,{M365_RELAY_OFFICECLI:plan.officeExecutable,OFFICECLI_SKIP_UPDATE:'1',OFFICECLI_NO_AUTO_RESIDENT:'1',OFFICECLI_RESIDENT_FLUSH:'each'});
  const child=spawnProcess(plan.executable,['--user-data-dir',plan.userDataDir,'--new-window',plan.workspace],
   {detached:true,stdio:'ignore',shell:false,env});
  await once(child,'spawn');child.unref();

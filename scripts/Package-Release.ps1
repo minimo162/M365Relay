@@ -1,6 +1,6 @@
 # Build on Windows PowerShell 5.1+; no installed Node.js or npm is required.
 [CmdletBinding()]
-param([string]$NodeArchive, [string]$OutputDirectory)
+param([string]$NodeArchive, [string]$OutputDirectory, [string]$OfficeCliDirectory)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version 2.0
@@ -43,6 +43,7 @@ try {
     $env:NODE_OPTIONS = $null; $env:NODE_PATH = $null
     $actualVersion = & (Join-Path $runtime 'node.exe') --version
     if ($LASTEXITCODE -ne 0 -or $actualVersion -cne "v$($lock.version)") { throw 'Bundled runtime version check failed.' }
+    & (Join-Path $PSScriptRoot 'Prepare-OfficeRuntime.ps1') -Destination (Join-Path $runtime 'officecli') -SourceDirectory $OfficeCliDirectory
     # Curated distribution: never copy local settings, tokens, profiles, logs or npm.
     foreach ($relative in @('src','prompts','config','README.md','THIRD_PARTY.md','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd','Open-Copilot.cmd','Start-Bridge.cmd','package.json')) {
         if ($relative -in @('src','prompts','config')) {
@@ -52,6 +53,7 @@ try {
         } else { Copy-Item -LiteralPath (Join-Path $root $relative) -Destination (Join-Path $stage $relative) }
     }
     Copy-Item -LiteralPath (Join-Path $root 'config\node-runtime.lock.json') -Destination (Join-Path $stage 'config')
+    Copy-Item -LiteralPath (Join-Path $root 'config\officecli-runtime.lock.json') -Destination (Join-Path $stage 'config')
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'scripts')
     foreach ($name in @('Launch.ps1','Verify-Distribution.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $stage 'scripts') }
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'docs')
