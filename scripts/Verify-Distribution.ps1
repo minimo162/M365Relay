@@ -39,4 +39,3 @@ foreach($file in $officeLock.files) {
     if (-not $seen.ContainsKey($relative)) { throw "OfficeCLI manifest entry missing: $relative" }
     if ((Get-FileHash -LiteralPath (Join-Path $root $relative) -Algorithm SHA256).Hash.ToLowerInvariant() -cne $file.sha256) { throw 'OfficeCLI does not match the pinned runtime.' }
 }
-

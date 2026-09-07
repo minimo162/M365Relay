@@ -40,4 +40,3 @@ export async function createRunLog(home,{print=console.log,warn=console.error,js
     flush(){return pending;}
   };
 }
-

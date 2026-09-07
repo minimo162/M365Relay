@@ -30,4 +30,3 @@ export function safeDiagnostics(value) {
   for(const key of ['button_found','button_enabled','busy'])if(typeof value[key]==='boolean')out[key]=value[key];
   return out;
 }
-
