@@ -1,6 +1,7 @@
 import {mkdir,appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {safeDiagnostics} from './diagnostics.mjs';
 
 const phases=['connect','open_tab','attach_tab','wait_editor','reset_conversation','editor_stable','input_before','input_focus','input_insert','input_settle','send_ready','before_send','send','response_wait','response_validate','cleanup'];
 export function logMetadata(record){
@@ -14,6 +15,7 @@ export function logMetadata(record){
   if(['success','error','cancelled'].includes(record.outcome))out.outcome=record.outcome;
   if(typeof record.possibly_sent==='boolean')out.possibly_sent=record.possibly_sent;
   if(typeof record.code==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(record.code))out.code=record.code;
+  const details=safeDiagnostics(record.details);if(Object.keys(details).length)out.details=details;
   if(record.phase_ms&&typeof record.phase_ms==='object')out.phase_ms=Object.fromEntries(phases.filter(k=>Number.isSafeInteger(record.phase_ms[k])&&record.phase_ms[k]>=0).map(k=>[k,record.phase_ms[k]]));
   return out;
 }

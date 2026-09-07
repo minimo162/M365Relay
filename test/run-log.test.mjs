@@ -11,9 +11,11 @@ test('run log preserves timings but excludes message bodies and credentials',asy
  logger.log({event:'accepted',prompt_chars:100,tools:2,prompt:'PRIVATE',authorization:'SECRET'});
  logger.log({event:'backend_timing',outcome:'success',total_ms:12,phase_ms:{editor_stable:5,send_ready:3,PRIVATE:9},content:'PRIVATE'});
  logger.log({event:'response_returned',kind:'final'});await logger.flush();
+ logger.log({event:'error',code:'m365_dom_changed',details:{stage:'m365_dom',dom_operation:'editorReady',html:'PRIVATE',token:'SECRET'}});await logger.flush();
  const text=await readFile(logger.path,'utf8');assert(!/PRIVATE|SECRET/.test(text));
  const rows=text.trim().split('\n').map(JSON.parse);assert.equal(rows[1].phase_ms.editor_stable,5);assert.equal(rows[1].phase_ms.send_ready,3);
- assert.equal(printed.length,2);assert(!printed.join('').includes('backend_timing'));
+ assert.equal(rows[3].details.dom_operation,'editorReady');
+ assert.equal(printed.length,3);assert(!printed.join('').includes('backend_timing'));
 });
 
 test('run log write failure and size cap do not stop status reporting',async t=>{

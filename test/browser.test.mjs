@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { CdpClient,assertWsUrl,verifyBrowserArguments } from '../src/cdp.mjs';
 import { M365Backend } from '../src/m365.mjs';
+import { publicError } from '../src/errors.mjs';
 import { browserOperation } from '../src/dom.mjs';
 import { MODEL,PROTOCOL,prepareRequest } from '../src/protocol.mjs';
 const config=JSON.parse(await readFile(new URL('../config/settings.example.json',import.meta.url),'utf8'));
@@ -101,6 +102,21 @@ test('continuously replaced editor times out without insertion or send',async()=
   assert.equal(f.events.includes('Input.insertText'),false);
   assert.equal(f.state.sent,0);
   assert.deepEqual(f.state.closed,['owned-target']);
+});
+
+test('readiness DOM exceptions preserve their operation without exposing page errors',async()=>{
+ for(const operation of ['editorReady','sendReady']){
+  const f=fixture(),original=f.browser.send;
+  f.browser.send=async(method,params,...rest)=>{
+   if(method==='Runtime.evaluate'&&params.expression.includes(`,"${operation}",`))return {exceptionDetails:{text:'PRIVATE PAGE CONTENT'}};
+   return original(method,params,...rest);
+  };
+  await assert.rejects(execute(f),error=>{
+   const safe=publicError(error);assert.equal(safe.details.dom_operation,operation);
+   assert(!JSON.stringify(safe).includes('PRIVATE'));return true;
+  });
+  assert.equal(f.state.sent,0);
+ }
 });
 
 test('Scriptor code lines exclude gutters and reject virtualized gaps or incomplete replies',()=>{

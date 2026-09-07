@@ -57,7 +57,7 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{}}) 
       if(fingerprint&&!settled) {
         try{await ledger.set(fingerprint,possiblySent?'unknown_or_invalid':'not_sent');}catch{}
       }
-      log({request_id:parsed?.requestId??null,event:'error',code:safe.code});
+      log({request_id:parsed?.requestId??null,event:'error',code:safe.code,details:safe.details});
       if(!res.destroyed&&!res.writableEnded) {
         if(res.headersSent) {res.write(`data: ${JSON.stringify({error:safe})}\n\n`);res.end('data: [DONE]\n\n');}
         else json(res,error instanceof BridgeError?error.status:signal.aborted?504:500,{error:safe});
