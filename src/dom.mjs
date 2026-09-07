@@ -101,6 +101,16 @@ export function browserOperation(origin,selectors,operation,args={}) {
     return {candidates:[],nonempty:false};
   }
   const normalize=t=>t.replace(/\r\n?/g,'\n');
+  if(operation==='editorReady'){
+    const key='__m365RelayEditorReadiness';
+    const empty=!!editor&&enabled(editor)&&!editorText(editor).text&&!control('stop')&&!replies().nonempty;
+    if(!empty){delete document[key];return {ready:false};}
+    let previous=document[key];
+    if(!previous||previous.editor!==editor||previous.requestId!==args.requestId){
+      previous={editor,requestId:args.requestId,since:Date.now()};document[key]=previous;
+    }
+    return {ready:Date.now()-previous.since>=args.stableMs};
+  }
   if(operation==='snapshot')return {origin:location.origin,editor:!!editor,input:editorText(editor).text,busy:!!control('stop'),...replies()};
   if(operation==='verifyInput')return inputCheck(args.expected);
   if(operation==='sendReady'){
@@ -111,6 +121,10 @@ export function browserOperation(origin,selectors,operation,args={}) {
     return {ready:checked.matched&&!busy&&enabled(button),editor:true,busy,button:!!button,enabled:enabled(button),input:checked};
   }
   if(operation==='focus'){
+    if(args.requestId){
+      const readiness=document.__m365RelayEditorReadiness;
+      if(!readiness||readiness.editor!==editor||readiness.requestId!==args.requestId||Date.now()-readiness.since<args.stableMs)return {focused:false};
+    }
     if(!editor||!enabled(editor))throw new Error('editor_missing');editor.focus();
     if(editor.isContentEditable){const r=editor.ownerDocument.createRange();r.selectNodeContents(editor);r.collapse(false);const s=editor.ownerDocument.getSelection();s.removeAllRanges();s.addRange(r);}
     else if(editor.setSelectionRange)editor.setSelectionRange(editor.value.length,editor.value.length);

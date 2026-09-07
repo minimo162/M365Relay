@@ -174,6 +174,22 @@ async function backendCase({text='普通の依頼',setup='',timing={},onBeforeSe
  }
  evidence.request=request;return evidence;
 }
+test('real DOM readiness resets when the visible empty editor is replaced',async()=>{
+ const p=await page();try{
+  const args={requestId:'readiness-case',stableMs:150};
+  assert.equal((await p.op('editorReady',args)).ready,false);
+  await new Promise(resolve=>setTimeout(resolve,180));
+  assert.equal((await p.op('editorReady',args)).ready,true);
+  await p.evalJS('const old=document.querySelector("[contenteditable]");old.replaceWith(old.cloneNode(true));');
+  assert.equal((await p.op('focus',args)).focused,false);
+  assert.equal((await p.op('editorReady',args)).ready,false);
+  await new Promise(resolve=>setTimeout(resolve,180));
+  assert.equal((await p.op('editorReady',args)).ready,true);
+  assert.equal((await p.op('focus',args)).focused,true);
+  assert.equal(await p.evalJS('fixture.sends'),0);
+ }finally{await p.close();}
+});
+
 test('real CDP backend inputs >40000 UTF-16 units in one insertion and clicks once',async()=>{
  const a=await backendCase({text:'😀 日本語 空白  ; C:\\Work\\memo.txt\n'.repeat(1500)});
  assert.ifError(a.error);assert(a.request.prompt.length>40000);assert.equal(a.fixture.inserts.join(''),a.request.prompt);assert.equal(a.fixture.inserts.length,1);

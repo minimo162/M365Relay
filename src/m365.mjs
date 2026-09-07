@@ -5,9 +5,9 @@ import { parseEnvelope } from './protocol.mjs';
 import { assert, BridgeError, delay, abortReason } from './errors.mjs';
 
 export class M365Backend {
-  constructor(config,{connect=connectOwnedBrowser,inputSettleMs=8000,inputPollMs=75,inputStableMs=250,sendReadyMs=15000,sendReadyStableMs=250,onMetrics=()=>{},responsePollMs=config.pollIntervalMs,responseStableMs=config.stableMs}={}){
+  constructor(config,{connect=connectOwnedBrowser,editorStableMs=1000,inputSettleMs=8000,inputPollMs=75,inputStableMs=250,sendReadyMs=15000,sendReadyStableMs=250,onMetrics=()=>{},responsePollMs=config.pollIntervalMs,responseStableMs=config.stableMs}={}){
     this.config=config;this.connect=connect;this.onMetrics=onMetrics;
-    this.inputTiming={inputSettleMs,inputPollMs,inputStableMs,sendReadyMs,sendReadyStableMs};
+    this.inputTiming={editorStableMs,inputSettleMs,inputPollMs,inputStableMs,sendReadyMs,sendReadyStableMs};
     this.responseTiming={responsePollMs,responseStableMs};
   }
   async complete(request,{signal,onBeforeSend}) {
@@ -88,12 +88,24 @@ export class M365Backend {
         do {await delay(config.pollIntervalMs,signal);state=await evaluate('snapshot');if(state.editor&&!state.nonempty&&!state.input.trim()&&!state.busy)break;}while(Date.now()<resetDeadline);
       }
       assert(state.editor&&!state.nonempty&&!state.input.trim()&&!state.busy,'conversation_not_empty','会話の初期化を確認できません。送信を停止します。',409);
+      // M365 can replace an already visible editor after document load. Wait on
+      // the actual node identity, not just presence or document.readyState.
+      enter('editor_stable');
+      const readyArgs={requestId:request.requestId,stableMs:this.inputTiming.editorStableMs};
+      const editorDeadline=Date.now()+config.readyTimeoutMs;let editorReady=false;
+      do {
+        abortReason(signal);
+        const readiness=await evaluate('editorReady',readyArgs);
+        if(readiness.ready){editorReady=true;break;}
+        await delay(this.inputTiming.inputPollMs,signal);
+      }while(Date.now()<editorDeadline);
+      assert(editorReady,'editor_not_ready','M365入力欄の初期化が安定しません。送信せず停止しました。',503);
       // One CDP text insertion behaves like a paste without touching the user's clipboard.
       // There is no per-chunk typing loop: insert once, then verify the complete prompt
       // repeatedly until the DOM is stable. On mismatch we never insert again.
       enter('input_before');const before=await checkInput('');
       if(!before.matched)throw inputFailure('input_changed',before,0);
-      enter('input_focus');assert((await evaluate('focus')).focused,'focus_failed','入力欄へフォーカスできません。',502);
+      enter('input_focus');assert((await evaluate('focus',readyArgs)).focused,'focus_failed','入力欄が変化したため、入力せず停止しました。',502);
       enter('input_insert');await browser.send('Input.insertText',{text:request.prompt},sessionId,signal,30000);
       enter('input_settle');await settleInput(request.prompt);
       // A very large single insertion can be text-complete before M365 finishes

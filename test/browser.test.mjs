@@ -50,7 +50,7 @@ function fixture({origin=config.origin,oldReply='',dropInput=false,wrongReply=fa
 }
 async function execute(f,{signal=AbortSignal.timeout(1500),onMetrics}={}){
   const request=prepareRequest({model:MODEL,messages:[{role:'user',content:'test'}]},'test template');f.state.requestId=request.requestId;
-  const backend=new M365Backend(config,{connect:async()=>f.browser,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3,onMetrics});
+  const backend=new M365Backend(config,{connect:async()=>f.browser,editorStableMs:3,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3,onMetrics});
   return backend.complete(request,{signal,onBeforeSend:async()=>f.events.push('journaled-before-send')});
 }
 test('CDP endpoint requires exact loopback port and browser path',()=>{
@@ -73,6 +73,34 @@ test('assistant-only snapshot skips trailing empty reply and does not read user 
 test('DOM ambiguity stops rather than selecting an arbitrary editor',()=>{
   const f=fixture();f.nodes[config.selectors.editor[0]].push({...f.editor});
   assert.throws(()=>vm.runInContext(`(${browserOperation.toString()})(${JSON.stringify(config.origin)},${JSON.stringify(config.selectors)},'snapshot',{})`,f.context));
+});
+
+test('editor readiness restarts after node replacement even when both editors are empty',()=>{
+  const f=fixture();let now=0;
+  f.context.Date={now:()=>now};
+  const run=(operation,args={requestId:'one',stableMs:1000})=>vm.runInContext(`(${browserOperation.toString()})(${JSON.stringify(config.origin)},${JSON.stringify(config.selectors)},${JSON.stringify(operation)},${JSON.stringify(args)})`,f.context);
+  assert.equal(run('editorReady').ready,false);
+  now=900;assert.equal(run('editorReady').ready,false);
+  f.nodes[config.selectors.editor[0]]=[{...f.editor}];
+  now=1000;assert.equal(run('editorReady').ready,false);
+  now=1900;assert.equal(run('editorReady').ready,false);
+  now=2000;assert.equal(run('editorReady').ready,true);
+  f.nodes[config.selectors.editor[0]]=[f.editor];
+  assert.equal(run('focus').focused,false);
+  assert.equal(run('editorReady',{requestId:'two',stableMs:1000}).ready,false);
+  assert.equal(f.events.includes('Input.insertText'),false);
+});
+
+test('continuously replaced editor times out without insertion or send',async()=>{
+  const f=fixture(),original=f.browser.send;
+  f.browser.send=async(method,params,...rest)=>{
+    if(method==='Runtime.evaluate'&&params.expression.includes(',"editorReady",'))f.nodes[config.selectors.editor[0]]=[{...f.editor}];
+    return original(method,params,...rest);
+  };
+  await assert.rejects(execute(f),{code:'editor_not_ready'});
+  assert.equal(f.events.includes('Input.insertText'),false);
+  assert.equal(f.state.sent,0);
+  assert.deepEqual(f.state.closed,['owned-target']);
 });
 
 test('Scriptor code lines exclude gutters and reject virtualized gaps or incomplete replies',()=>{
@@ -157,7 +185,7 @@ test('mock DOM: completed input can wait for send readiness without reinsertion'
     return out;
   };
   const request=prepareRequest({model:MODEL,messages:[{role:'user',content:'test'}]},'test template');f.state.requestId=request.requestId;
-  const backend=new M365Backend(config,{connect:async()=>f.browser,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3});
+  const backend=new M365Backend(config,{connect:async()=>f.browser,editorStableMs:3,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3});
   const raw=await backend.complete(request,{signal:AbortSignal.timeout(1500),onBeforeSend:async()=>f.events.push('journaled-before-send')});
   assert.equal(JSON.parse(raw).content,'fixture final');
   assert.equal(f.events.filter(x=>x==='Input.insertText').length,1);
