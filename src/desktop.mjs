@@ -83,7 +83,8 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
     'editor.fontSize':16,'chat.fontSize':16,'chat.editor.fontSize':16,'window.zoomLevel':1,
     'workbench.startupEditor':'none',
     'workbench.secondarySideBar.defaultVisibility':'maximized','workbench.sideBar.location':'left',
-    'chat.viewSessions.enabled':true,'chat.viewSessions.orientation':'sideBySide'};
+    'chat.viewSessions.enabled':true,'chat.viewSessions.orientation':'sideBySide',
+    'security.workspace.trust.enabled':false};
  });
  return {executable,userDataDir,workspace:actualFolder};
 }

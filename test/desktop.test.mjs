@@ -25,6 +25,7 @@ test('first-run setup creates an isolated usable model without modifying a norma
  assert.equal(settings['chat.viewSessions.enabled'],true);
  assert.equal(settings['chat.viewSessions.orientation'],'sideBySide');
  assert.equal(settings['workbench.sideBar.location'],'left');
+ assert.equal(settings['security.workspace.trust.enabled'],false);
  assert.equal(await readFile(normal,'utf8'),'USER SETTINGS');
  assert.match(await readFile(join(plan.workspace,'はじめに.md'),'utf8'),/サインイン/);
 });
@@ -32,7 +33,7 @@ test('first-run setup creates an isolated usable model without modifying a norma
 test('repeat setup reapplies display settings and preserves unrelated preferences and workspace files',async t=>{
  const c=await fixture(t),p=await prepareDesktop(c);const models=join(p.userDataDir,'User','chatLanguageModels.json');
  const groups=JSON.parse(await readFile(models,'utf8'));groups.push({name:'User custom model',vendor:'other',models:[]});await writeFile(models,JSON.stringify(groups));
- await writeFile(join(p.userDataDir,'User','settings.json'),JSON.stringify({'editor.fontSize':18,'window.zoomLevel':0,'editor.wordWrap':'on','chat.byokUtilityModelDefault':'none'}));
+ await writeFile(join(p.userDataDir,'User','settings.json'),JSON.stringify({'editor.fontSize':18,'window.zoomLevel':0,'editor.wordWrap':'on','chat.byokUtilityModelDefault':'none','security.workspace.trust.enabled':true,'chat.tools.global.autoApprove':false}));
  await writeFile(join(p.workspace,'はじめに.md'),'user-edited guide');
  await prepareDesktop({...c,port:8744,token:'b'.repeat(64)});
  const updated=JSON.parse(await readFile(models,'utf8'));assert(updated.some(g=>g.name==='User custom model'));
@@ -40,6 +41,8 @@ test('repeat setup reapplies display settings and preserves unrelated preference
  assert.equal(await readFile(join(p.workspace,'はじめに.md'),'utf8'),'user-edited guide');
  const settings=JSON.parse(await readFile(join(p.userDataDir,'User','settings.json'),'utf8'));assert.equal(settings['editor.fontSize'],16);assert.equal(settings['window.zoomLevel'],1);assert.equal(settings['editor.wordWrap'],'on');assert.equal(settings['chat.byokUtilityModelDefault'],'none');
  const bytes=await readFile(models,'utf8');await prepareDesktop({...c,port:8744,token:'b'.repeat(64)});assert.equal(await readFile(models,'utf8'),bytes);
+ assert.equal(settings['security.workspace.trust.enabled'],false);
+ assert.equal(settings['chat.tools.global.autoApprove'],false);
 });
 
 test('malformed or conflicting model configuration is preserved and rejected',async t=>{
@@ -74,14 +77,15 @@ test('old generated utility default migrates without changing a customized selec
  await prepareDesktop(c);const s=JSON.parse(await readFile(settingsPath,'utf8'));assert.equal(s['chat.byokUtilityModelDefault'],'mainAgent');assert.equal(s['chat.utilityModel'],'customendpoint/user-model');
 });
 
-test('desktop opens the real directory of a workspace link without changing access settings',async t=>{
+test('desktop resolves workspace links without adding execution approvals or path allowlists',async t=>{
  const c=await fixture(t),target=join(c.home,'actual'),link=join(c.home,'linked');
  await mkdir(target);await writeFile(join(target,'sample.txt'),'preserve');
  await symlink(target,link,process.platform==='win32'?'junction':'dir');
  const plan=await prepareDesktop(c,{workspace:link});assert.equal(plan.workspace,await realpath(target));
  assert.equal(await readFile(join(plan.workspace,'sample.txt'),'utf8'),'preserve');
  const settings=JSON.parse(await readFile(join(plan.userDataDir,'User','settings.json'),'utf8'));
- assert(!Object.keys(settings).some(k=>/trust|allow|approve|access/i.test(k)));
+ assert.equal(settings['security.workspace.trust.enabled'],false);
+ assert(!Object.keys(settings).filter(k=>k!=='security.workspace.trust.enabled').some(k=>/trust|allow|approve|access/i.test(k)));
 });
 
 test('unresolvable workspace fails rather than opening a guessed location',async t=>{

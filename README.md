@@ -41,9 +41,10 @@ GitHubのCode → Download ZIP / Source code (zip)はNode.jsを含まないた�
 
 1. `Run.cmd`を開きます。設定・接続キー・専用VS Code設定を自動で作成し、EdgeとVS Codeを起動します。
 2. 専用EdgeでM365へ手動サインインします。VS Codeの初回案内では「Continue without Signing In」を選べます。GitHubへのサインインは不要です。
-3. VS CodeのチャットでM365Relayを選び、依頼を入力します。フォルダーの信頼や操作の承認は画面で確認します。
+3. VS CodeのチャットでM365Relayを選び、依頼を入力します。エージェントの操作の承認は画面で確認します。
 
 接続キーのコピーやJSON編集は不要です。通常のVS Code設定は変更せず、M365Relay専用のユーザーデータを使います。
+専用VS Codeではワークスペース信頼を無効化して起動します。この専用環境で開くすべてのフォルダーが対象で、Restricted Modeによる制限はありません。エージェントの操作承認設定は変更しません。
 モデル選択にAutoしか表示されない場合は、Manage Modelsを一度開いてからM365Relayを選びます。
 既存フォルダーで始めるには、そのフォルダーをRun.cmdへドラッグするか、VS Codeで「フォルダーを開く」を選びます。
 
