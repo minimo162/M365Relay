@@ -26,6 +26,7 @@ test('first-run setup creates an isolated usable model without modifying a norma
  assert.equal(settings['chat.viewSessions.orientation'],'sideBySide');
  assert.equal(settings['workbench.sideBar.location'],'left');
  assert.equal(settings['security.workspace.trust.enabled'],false);
+ assert.equal(settings['terminal.integrated.env.windows'].M365_RELAY_NODE,await realpath(process.execPath));
  assert.equal(await readFile(normal,'utf8'),'USER SETTINGS');
  assert.match(await readFile(join(plan.workspace,'はじめに.md'),'utf8'),/サインイン/);
 });

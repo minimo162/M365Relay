@@ -49,6 +49,7 @@ Copilot側は、新しい会話を開くたびに`GPT 5.6 Think Deeper`を画面
 
 接続キーのコピーやJSON編集は不要です。通常のVS Code設定は変更せず、M365Relay専用のユーザーデータを使います。
 専用VS Codeではワークスペース信頼を無効化して起動します。この専用環境で開くすべてのフォルダーが対象で、Restricted Modeによる制限はありません。エージェントの操作承認設定は変更しません。
+専用端末では`M365_RELAY_NODE`が本体に含まれるNode.jsを指します。PowerShellからは`& $env:M365_RELAY_NODE script.mjs`で利用でき、PC全体のPATH変更は不要です。PDF・Office用ライブラリは現時点では同梱していません。
 モデル選択にAutoしか表示されない場合は、Manage Modelsを一度開いてからM365Relayを選びます。
 既存フォルダーで始めるには、そのフォルダーをRun.cmdへドラッグするか、VS Codeで「フォルダーを開く」を選びます。
 
