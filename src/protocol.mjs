@@ -4,6 +4,12 @@ import { strictJson, isObject, exactKeys } from './json.mjs';
 import { compileSchema } from './schema.mjs';
 export const PROTOCOL = 'm365-relay.v1';
 export const MODEL = 'm365-copilot-ui';
+const transportReminder=String.raw`応答の最終確認: ツール引数のjson-stringではUnicodeエスケープを使います。
+文字としてのアンパサンドは \u0026、小なりは \u003c、大なりは \u003e と書きます。
+例: 矢印のJSON文字列表現は "x =\u003e x"。実体参照の文字列そのものは "\u0026gt;"。
+この2つを混同しないでください。HTML復号も、その逆のHTMLエンコードもしません。
+ツールを呼ぶ場合はコードブロックのBRIDGE_TOOL形式と今回のrequest_idを使い、json-stringの中に & < > を直接出力しないでください。
+最終回答の場合は指定済みのBRIDGE_FINAL_V2形式を使います。tool_choiceとresponse_formatを守ってください。`;
 const toolName = /^[A-Za-z0-9_.:-]{1,128}$/;
 function textContent(c) {
   if (c === null || c === undefined) return null;
@@ -90,7 +96,7 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, 
   // Keep HTML-like text out of the literal UI payload. JSON Unicode escapes
   // preserve the exact values while avoiding entity interpretation upstream.
   const serialized=JSON.stringify(payload).replace(/[&<>]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0'));
-  const prompt = `${promptTemplate.trim()}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${serialized}\n`;
+  const prompt = `${promptTemplate.trim()}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${serialized}\nEND_BRIDGE_REQUEST_JSON\n${transportReminder}\n`;
   const promptLimit=Math.min(maxPromptChars,120000);
   if(prompt.length>promptLimit)throw new BridgeError('context_too_large', '会話とツール定義が入力上限を超えました。会話を圧縮するか、選択ツールを減らしてください。本文は切り捨てず、M365への送信前に停止しました。', 413,
     {prompt_chars:prompt.length,max_prompt_chars:promptLimit});

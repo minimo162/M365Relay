@@ -150,7 +150,7 @@ test('serialized prompt is bounded at 120000 characters even with legacy larger 
 test('UI request JSON escapes HTML-sensitive characters without changing payload values',()=>{
  const content='row => row.active; literal &gt; &lt; &amp; <summary>日本語😀</summary> \\u003e';
  const r=prepareRequest({model:MODEL,messages:[{role:'user',content}]},'test template');
- const wire=r.prompt.split('BRIDGE_REQUEST_JSON:\n')[1].trim();
+ const wire=r.prompt.split('BRIDGE_REQUEST_JSON:\n')[1].split('\nEND_BRIDGE_REQUEST_JSON\n')[0];
  assert(!/[&<>]/.test(wire));
  assert.deepEqual(JSON.parse(wire),r.payload);
  assert.equal(JSON.parse(wire).messages[0].content,content);
