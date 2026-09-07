@@ -23,3 +23,10 @@ are preserved there. Source: https://github.com/iOfficeAI/OfficeCLI/tree/0a450e4
 Executable and notice hashes are pinned in `config/officecli-runtime.lock.json`.
 Its own updater and automatic resident mode are disabled in the dedicated environment;
 M365Relay's distribution manages its version. Rendering can require an external browser.
+
+LiteParse 2.14.4 (Apache-2.0), its Windows x64 native package/PDFium, and commander
+are included under `runtime/liteparse/node_modules`. Source: https://github.com/run-llama/liteparse
+Exact package versions, download URLs and integrity hashes are recorded in
+`runtime/liteparse/package-lock.json`. Upstream package license files are preserved.
+OCR is disabled in the bundled PDF command; no OCR server or cloud parser is configured.
+The embedded native engine includes third-party code whose notices must remain with it.

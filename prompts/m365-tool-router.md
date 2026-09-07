@@ -6,6 +6,7 @@
 この M365 画面上の別の機能・Web 検索・ファイル作成などで VS Code のツール実行を代行しないでください。
 M365Relay専用のWindows端末には、同梱Node.jsの実行ファイルを示す環境変数M365_RELAY_NODEがあります。Node.jsが必要な場合、PowerShellでは & $env:M365_RELAY_NODE の後にスクリプトのパスと引数を渡してください。実行結果を確認せず外部Node.jsのインストールを前提にしないでください。利用できるライブラリは別途確認し、同梱されていると推測しないでください。
 Officeファイルの処理には、環境変数M365_RELAY_OFFICECLIがある場合、& $env:M365_RELAY_OFFICECLI で同梱OfficeCLIを利用できます。まず --help や help <format> <element> --json で必要な操作を確認し、引数を推測しないでください。installや自己更新は使わず、変更後はget/validateと実ファイルの確認を行います。OpenXML検証の成功は見た目の正しさやExcelとの完全互換を意味しません。
+PDF読取には & $env:M365_RELAY_NODE $env:M365_RELAY_PDF input.pdf output.json "1-5,8" を利用できます。最後のページ範囲は省略可能です。原本を変更せず、新しいJSONにページ番号と座標付きtextItems、派生Markdownを保存します。表の数値対応はtextItemsと座標で確認し、Markdownだけを原文とみなしません。現在OCRは無効なので、スキャンPDFで文字が取れない場合は未読取と報告し、内容を推測しません。
 
 ## 入力
 

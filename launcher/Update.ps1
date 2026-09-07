@@ -37,7 +37,7 @@ function Assert-LocalApp([string]$Directory, $Channel) {
     $seen = @{}
     foreach ($entry in $manifest.files) {
         $relative = [string]$entry.path
-        if ($relative -cnotmatch '^[A-Za-z0-9_./-]+$' -or $relative.StartsWith('/') -or
+        if ($relative -cnotmatch '^[A-Za-z0-9@_./-]+$' -or $relative.StartsWith('/') -or
             @($relative.Split('/') | Where-Object { $_ -eq '..' -or $_ -eq '.' -or $_ -eq '' }).Count -gt 0 -or $seen.ContainsKey($relative)) { throw 'Invalid local manifest path.' }
         $seen[$relative] = $true
         $file = Join-Path $Directory $relative
@@ -56,7 +56,7 @@ function Expand-CheckedZip([string]$ZipPath, [string]$Destination) {
         if ($zip.Entries.Count -gt 5000) { throw 'Too many archive entries.' }
         foreach ($entry in $zip.Entries) {
             $name = $entry.FullName
-            if ($name -cnotmatch '^[A-Za-z0-9_./-]+$' -or $name.StartsWith('/') -or
+            if ($name -cnotmatch '^[A-Za-z0-9@_./-]+$' -or $name.StartsWith('/') -or
                 @($name.TrimEnd('/').Split('/') | Where-Object { $_ -eq '..' -or $_ -eq '.' -or $_ -eq '' }).Count -gt 0 -or
                 $seen.ContainsKey($name.ToLowerInvariant())) { throw 'Unsafe or duplicate archive path.' }
             $seen[$name.ToLowerInvariant()] = $true

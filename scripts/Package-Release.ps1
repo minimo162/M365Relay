@@ -44,6 +44,24 @@ try {
     $actualVersion = & (Join-Path $runtime 'node.exe') --version
     if ($LASTEXITCODE -ne 0 -or $actualVersion -cne "v$($lock.version)") { throw 'Bundled runtime version check failed.' }
     & (Join-Path $PSScriptRoot 'Prepare-OfficeRuntime.ps1') -Destination (Join-Path $runtime 'officecli') -SourceDirectory $OfficeCliDirectory
+    # Use npm from the checksum-verified official Node archive only at build time.
+    $buildNpm = Join-Path $work 'build-npm'
+    $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $NodeArchive).Path)
+    try {
+        foreach($entry in $archive.Entries) {
+            $npmPrefix = "$prefix/node_modules/npm/"
+            if (-not $entry.FullName.StartsWith($npmPrefix) -or $entry.FullName.EndsWith('/')) { continue }
+            $target = [IO.Path]::GetFullPath((Join-Path $buildNpm $entry.FullName.Substring($npmPrefix.Length)))
+            if (-not $target.StartsWith($buildNpm+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid npm archive path.' }
+            New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($target)) | Out-Null
+            [IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$target,$false)
+        }
+    } finally { $archive.Dispose() }
+    $pdfRuntime=Join-Path $runtime 'liteparse'
+    New-Item -ItemType Directory -Path $pdfRuntime | Out-Null
+    Copy-Item -LiteralPath (Join-Path $root 'pdf-runtime/package.json'),(Join-Path $root 'pdf-runtime/package-lock.json') -Destination $pdfRuntime
+    & (Join-Path $runtime 'node.exe') (Join-Path $buildNpm 'bin/npm-cli.js') ci --prefix $pdfRuntime --omit=dev --ignore-scripts --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $pdfRuntime 'node_modules/@llamaindex/liteparse-win32-x64-msvc/pdfium.dll'))) { throw 'Pinned PDF runtime installation failed.' }
     # Curated distribution: never copy local settings, tokens, profiles, logs or npm.
     foreach ($relative in @('src','prompts','config','README.md','THIRD_PARTY.md','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd','Open-Copilot.cmd','Start-Bridge.cmd','package.json')) {
         if ($relative -in @('src','prompts','config')) {

@@ -50,7 +50,8 @@ Copilot側は、新しい会話を開くたびに`GPT 5.6 Think Deeper`を画面
 接続キーのコピーやJSON編集は不要です。通常のVS Code設定は変更せず、M365Relay専用のユーザーデータを使います。
 専用VS Codeではワークスペース信頼を無効化して起動します。この専用環境で開くすべてのフォルダーが対象で、Restricted Modeによる制限はありません。エージェントの操作承認設定は変更しません。
 専用端末では`M365_RELAY_NODE`が本体に含まれるNode.jsを指します。PowerShellからは`& $env:M365_RELAY_NODE script.mjs`で利用でき、PC全体のPATH変更は不要です。
-OfficeCLI 1.0.148も本体に同梱し、`& $env:M365_RELAY_OFFICECLI --help`で利用できます。OfficeCLI自身の自動更新・自動常駐は無効にし、M365Relayと一緒に更新します。Word・Excel・PowerPointの処理候補として利用できますが、複雑な文書の互換性は検証中です。PDF専用ライブラリはまだ同梱していません。
+OfficeCLI 1.0.148も本体に同梱し、`& $env:M365_RELAY_OFFICECLI --help`で利用できます。OfficeCLI自身の自動更新・自動常駐は無効にし、M365Relayと一緒に更新します。Word・Excel・PowerPointの処理候補として利用できますが、複雑な文書の互換性は検証中です。
+文字PDFの読取にはLiteParse 2.14.4を同梱します。`& $env:M365_RELAY_NODE $env:M365_RELAY_PDF input.pdf output.json "1-5,8"`でページ・座標付き原文とMarkdownを新規JSONへ保存します。ページ範囲は省略可能です。OCRは無効で、スキャンPDFの文字認識は未対応です。表の対応はMarkdownだけでなく位置付き原文で確認する必要があります。
 モデル選択にAutoしか表示されない場合は、Manage Modelsを一度開いてからM365Relayを選びます。
 既存フォルダーで始めるには、そのフォルダーをRun.cmdへドラッグするか、VS Codeで「フォルダーを開く」を選びます。
 
