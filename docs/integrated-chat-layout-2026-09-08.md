@@ -1,0 +1,13 @@
+# 履歴付きチャットの初期配置
+
+ユーザーは左右の位置よりも、一体型チャットと履歴だけを広く表示することを優先。標準ChatをSide Barへ移動して最大化すると、入力1つと右側のSessions一覧になった。履歴をクリックして過去の会話へ切り替え、最新の会話へ戻れることを実画面で確認した。
+
+3ae8fdfで専用プロファイルのstartupEditorをnone、secondarySideBar.defaultVisibilityをmaximized、chat.viewSessions.enabledをtrue、orientationをsideBySideへ変更。agentSessionsWelcomePageは新規ワークスペースでサイドバーを隠すため併用しない。フォント16・zoom1は保持。
+
+ソースから未使用のintegrated-layout-20260908を開き同配置を確認。その後3ae8fdff0ede配布ZIPを新しく展開し、Run.cmdから同フォルダーを再開して同じ配置を確認。後者は保存済み配置の再開であり、配布ZIPで未使用フォルダーを開いた証拠とは区別する。
+
+desktop8テスト、27JS/4JSON構文検査、配布8検査に合格。配布検査は実同梱NodeでPATH Nodeを使わず、破損ファイルの拒否も含む。
+
+新規フォルダーはRestricted Modeで、信頼設定は操作していない。M365既存認証と専用プロファイルを使用したため、未認証からの全初回利用は未検証。履歴はワークスペース単位。既存作業で保存した配置を毎回強制上書きする設定ではない。
+
+候補ZIP: dist/integrated-chat-candidate/M365Relay-0.2.16-win-x64-3ae8fdff0ede.zip。稼働サーバーは.local/integrated-chat-package由来、診断ログはrun-4c271bdf-467b-4244-a778-23595da24277.jsonl。全体実用化目標は継続中。
