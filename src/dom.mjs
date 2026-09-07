@@ -1,3 +1,4 @@
+import { DOM_REASONS, DOM_TAGS } from './diagnostics.mjs';
 // This function is stringified and evaluated in ONLY our own M365 tab.
 // Page text is returned as data; it is never evaluated as JavaScript.
 export function browserOperation(origin,selectors,operation,args={}) {
@@ -7,7 +8,7 @@ export function browserOperation(origin,selectors,operation,args={}) {
   frames(document,0);
   const visible=e=>{if(!e)return false;const s=e.ownerDocument.defaultView.getComputedStyle(e),r=e.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&r.width>0&&r.height>0;};
   const find=list=>{
-    for(const selector of list){const found=[...new Set(docs.flatMap(d=>Array.from(d.querySelectorAll(selector))).filter(visible))];if(found.length===1)return found[0];if(found.length>1)throw new Error('ambiguous_control');}
+    for(const selector of list){let matches;try{matches=docs.flatMap(d=>Array.from(d.querySelectorAll(selector)));}catch{throw new Error('invalid_selector');}const found=[...new Set(matches.filter(visible))];if(found.length===1)return found[0];if(found.length>1)throw new Error('ambiguous_control');}
     return null;
   };
   const label=e=>(e.getAttribute('aria-label')||e.title||e.textContent||'').trim();
@@ -29,19 +30,24 @@ export function browserOperation(origin,selectors,operation,args={}) {
     if (typeof e.value === 'string') return {text:e.value,reader:'value'};
     if (!e.isContentEditable || !e.childNodes) throw new Error('unsupported_editor');
     const blocks=new Set(['P','DIV','PRE']);
-    const inline=new Set(['SPAN','B','STRONG','I','EM','U','S','STRIKE','CODE','MARK','SUB','SUP']);
+    // Auto-linking changes markup, not the submitted characters. Read only the
+    // anchor's text children; never read href, follow a link or alter the DOM.
+    const inline=new Set(['A','SPAN','B','STRONG','I','EM','U','S','STRIKE','CODE','MARK','SUB','SUP']);
     let nodes=0;
+    const fail=(reason,node)=>{const error=new Error(reason);error.bridgeTag=node?.tagName;throw error;};
     function plain(n,depth=0) {
       if(++nodes>100000||depth>64)throw new Error('editor_too_complex');
       if(n.nodeType===3)return n.nodeValue??'';
       if(n.nodeType===8)return '';
-      if(n.nodeType!==1)throw new Error('unsupported_editor_node');
+      if(n.nodeType!==1)fail('unsupported_editor_node',n);
+      if(n.hidden)return '';
+      if(n!==e&&n.getAttribute('aria-hidden')==='true') {
+        return '';
+      }
       if(n.tagName==='BR')return '\n';
-      if(n!==e&&!blocks.has(n.tagName)&&!inline.has(n.tagName))throw new Error('unsupported_editor_node');
-      if(n!==e&&(n.getAttribute('contenteditable')==='false'||n.hidden||n.getAttribute('aria-hidden')==='true'))throw new Error('nontext_editor_node');
+      if(n!==e&&!blocks.has(n.tagName)&&!inline.has(n.tagName))fail('unsupported_editor_node',n);
+      if(n!==e&&n.getAttribute('contenteditable')==='false'&&!inline.has(n.tagName))fail('nontext_editor_node',n);
       const cs=Array.from(n.childNodes).filter(x=>x.nodeType!==8);
-      // An otherwise empty line has a caret-placeholder <br>, not a character.
-      // Empty paragraphs between two paragraphs still count as a blank line.
       if((n===e||blocks.has(n.tagName))&&cs.length===1&&cs[0].nodeType===1&&cs[0].tagName==='BR')return '';
       const parts=[];let run='',inRun=false;
       for(const child of cs) {
@@ -51,7 +57,6 @@ export function browserOperation(origin,selectors,operation,args={}) {
         } else {run+=plain(child,depth+1);inRun=true;}
       }
       if(inRun)parts.push(run);
-      // A block boundary contributes exactly one LF, including empty blocks.
       return parts.join('\n');
     }
     return {text:plain(e),reader:'contenteditable-dom'};
@@ -77,6 +82,13 @@ export function browserOperation(origin,selectors,operation,args={}) {
   const normalize=t=>t.replace(/\r\n?/g,'\n');
   if(operation==='snapshot')return {origin:location.origin,editor:!!editor,input:editorText(editor).text,busy:!!control('stop'),...replies()};
   if(operation==='verifyInput')return inputCheck(args.expected);
+  if(operation==='sendReady'){
+    if(!editor)return {ready:false,editor:false,busy:false,button:false,enabled:false};
+    const checked=inputCheck(args.expected);
+    const busy=!!control('stop');
+    const button=control('send');
+    return {ready:checked.matched&&!busy&&enabled(button),editor:true,busy,button:!!button,enabled:enabled(button),input:checked};
+  }
   if(operation==='focus'){
     if(!editor||!enabled(editor))throw new Error('editor_missing');editor.focus();
     if(editor.isContentEditable){const r=editor.ownerDocument.createRange();r.selectNodeContents(editor);r.collapse(false);const s=editor.ownerDocument.getSelection();s.removeAllRanges();s.addRange(r);}
@@ -96,6 +108,14 @@ export function browserOperation(origin,selectors,operation,args={}) {
   }
   throw new Error('unsupported_operation');
 }
+export function guardedBrowserOperation(run,params,reasons,tags) {
+  try{return run(...params);}
+  catch(error){
+    const reason=reasons.includes(error?.message)?error.message:'unknown_dom_exception';
+    const tag=tags.includes(error?.bridgeTag)?error.bridgeTag:error?.bridgeTag?'OTHER':undefined;
+    return {__m365_relay_dom_error__:{reason,...(tag?{tag}:{})}};
+  }
+}
 export function domExpression(config,operation,args) {
-  return `(${browserOperation.toString()})(${JSON.stringify(config.origin)},${JSON.stringify(config.selectors)},${JSON.stringify(operation)},${JSON.stringify(args??{})})`;
+  return `(${guardedBrowserOperation.toString()})(${browserOperation.toString()},${JSON.stringify([config.origin,config.selectors,operation,args??{}])},${JSON.stringify(DOM_REASONS)},${JSON.stringify(DOM_TAGS)})`;
 }

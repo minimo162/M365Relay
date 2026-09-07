@@ -13,16 +13,24 @@ function fixture({origin=config.origin,oldReply='',dropInput=false,wrongReply=fa
   const document={activeElement:null,defaultView:{getComputedStyle:()=>({display:'block',visibility:'visible'})},
     createRange:()=>({selectNodeContents(){},collapse(){}}),getSelection:()=>({removeAllRanges(){},addRange(){}}),
     querySelectorAll(selector){return nodes[selector]??[];}};
-  function element(text='',click=()=>{}){return {innerText:text,textContent:text,isContentEditable:true,ownerDocument:document,getBoundingClientRect:()=>({width:100,height:40}),getAttribute:()=>null,querySelectorAll:()=>[],focus(){document.activeElement=this;},click};}
+  function element(text='',click=()=>{}){
+    let content=String(text);
+    const e={nodeType:1,tagName:'DIV',isContentEditable:true,childNodes:[],ownerDocument:document,getBoundingClientRect:()=>({width:100,height:40}),getAttribute:()=>null,querySelectorAll:()=>[],focus(){document.activeElement=this;},click};
+    const sync=()=>{e.childNodes=content?[{nodeType:3,nodeValue:content}]:[];};
+    Object.defineProperties(e,{
+      innerText:{get(){return content;},set(v){content=String(v);sync();},configurable:true},
+      textContent:{get(){return content;},set(v){content=String(v);sync();},configurable:true}
+    });
+    sync();return e;
+  }
   const editor=element(),reply=element(oldReply);
-  Object.defineProperty(editor,'value',{get(){return this.innerText;},set(value){this.innerText=value;}});
   nodes[config.selectors.editor[0]]=[editor];nodes[config.selectors.assistant[0]]=[reply];
   const send=element('送信',()=>{
     state.sent++;events.push('clicked');editor.innerText='';
     reply.innerText=wrongReply?'not JSON':JSON.stringify({protocol:PROTOCOL,request_id:state.requestId,action:'final',content:'fixture final',tool_calls:[],complete:true});
     if(loseSend)throw new Error('reply lost');
   });
-  const reset=element('新しいチャット',()=>{events.push('newChat');reply.innerText='';reply.textContent='';editor.innerText='';});
+  const reset=element('新しいチャット',()=>{events.push('newChat');reply.innerText='';editor.innerText='';});
   nodes[config.selectors.send[0]]=[send];nodes[config.selectors.newChat[0]]=[reset];
   const context=vm.createContext({location:{origin},document});
   const browser={
@@ -42,7 +50,7 @@ function fixture({origin=config.origin,oldReply='',dropInput=false,wrongReply=fa
 }
 async function execute(f,{signal=AbortSignal.timeout(1500)}={}){
   const request=prepareRequest({model:MODEL,messages:[{role:'user',content:'test'}]},'test template');f.state.requestId=request.requestId;
-  const backend=new M365Backend(config,{connect:async()=>f.browser,inputSettleMs:100,inputPollMs:5,inputStableMs:10});
+  const backend=new M365Backend(config,{connect:async()=>f.browser,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3});
   return backend.complete(request,{signal,onBeforeSend:async()=>f.events.push('journaled-before-send')});
 }
 test('CDP endpoint requires exact loopback port and browser path',()=>{
@@ -89,6 +97,25 @@ test('mock DOM: cancellation closes owned tab without sending',async()=>{
   const f=fixture();const c=new AbortController();const old=f.browser.send;
   f.browser.send=async(...args)=>{const out=await old(...args);if(args[0]==='Target.attachToTarget')c.abort();return out;};
   await assert.rejects(execute(f,{signal:c.signal}));assert.equal(f.state.sent,0);assert.deepEqual(f.state.closed,['owned-target']);
+});
+test('mock DOM: completed input can wait for send readiness without reinsertion',async()=>{
+  const f=fixture();
+  const send=f.nodes[config.selectors.send[0]][0];
+  let disabled=true;
+  send.getAttribute=name=>name==='aria-disabled'&&disabled?'true':null;
+  const original=f.browser.send;
+  let checks=0;
+  f.browser.send=async(...args)=>{
+    const out=await original(...args);
+    if(args[0]==='Runtime.evaluate' && ++checks>3)disabled=false;
+    return out;
+  };
+  const request=prepareRequest({model:MODEL,messages:[{role:'user',content:'test'}]},'test template');f.state.requestId=request.requestId;
+  const backend=new M365Backend(config,{connect:async()=>f.browser,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3});
+  const raw=await backend.complete(request,{signal:AbortSignal.timeout(1500),onBeforeSend:async()=>f.events.push('journaled-before-send')});
+  assert.equal(JSON.parse(raw).content,'fixture final');
+  assert.equal(f.events.filter(x=>x==='Input.insertText').length,1);
+  assert.equal(f.state.sent,1);
 });
 class FakeWebSocket extends EventTarget {
   constructor(){super();this.readyState=0;this.sent=[];setImmediate(()=>{this.readyState=1;this.dispatchEvent(new Event('open'));});}

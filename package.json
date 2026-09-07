@@ -1,6 +1,6 @@
 {
   "name": "m365-relay",
-  "version": "0.2.2",
+  "version": "0.2.15",
   "private": true,
   "description": "A local text/tool-call adapter from VS Code Custom Endpoint to the signed-in Microsoft 365 Copilot UI. Prototype; no tool execution.",
   "type": "module",

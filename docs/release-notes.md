@@ -1,24 +1,36 @@
-# M365Relay 0.2.2
+# M365Relay 0.2.15
 
-0.2.0を基準に、0.2.1のVS Codeスキーマ互換修正と0.2.2の入力照合修正を累積で反映した版です。
+0.2.2を基準に、実M365＋VS Codeでの検証中に判明した互換性修正を累積で反映した版です。
 配布ZIPはGitHub Actionsでコミット済みソースから生成し、Node.js 22.23.2 Windows x64と全文LICENSEを同梱します。
 `release-manifest.json`の`sourceRevision`はビルド対象の実コミットです。利用者向けにはマージ後mainの成功したCIから取得してください。
-ZIP名は`M365Relay-0.2.2-win-x64-<commit>.zip`です。
+ZIP名は`M365Relay-0.2.15-win-x64-<commit>.zip`です。
+
+## 主な更新
+
+- 入力欄のリンク化・非編集SPAN・`aria-hidden`装飾要素を実M365で確認し、本文の完全一致を保った読み取りへ対応。
+- 長文はCDP `Input.insertText` 1回で入力し、再挿入せずDOM安定を待機。送信ボタン有効化も最大15秒待ち、送信直前に全文照合。
+- DOM/内部例外の診断を本文非露出の安全なメタデータへ限定。
+- PC再起動前の古い`bridge.lock`をOS起動時刻で判定し自動回収。PID再利用による誤判定を防止。
+- 最終回答を`BRIDGE_FINAL`、ツール呼び出しを`BRIDGE_TOOL`のテキスト搬送形式へ対応。引用符・Windowsパス・Markdown・改行によるJSON破損を回避。
+- M365が制御語の`_`を`\_`へ変える場合や、制御形式の改行を1行へ畳み込む場合に対応。
+- 旧JSON形式の応答は後方互換として残し、Windows絶対パスの限定的な正規化のみ実施。
+- 同一ユーザー要求内で全ツール最大12回、`run_in_terminal`最大3回のループガードを追加。
+- Python・pypdf・PyMuPDF・pdftotext等を存在前提にせず、失敗した同じ依存関係を言い換えて繰り返さないようM365向け指示を追加。
 
 ## 更新
 
 旧版をCtrl+Cで停止し、新しいZIPを別フォルダーへ展開して`Start-Bridge.cmd`を起動します。
-起動表示の0.2.2を確認してください。既存設定・token.txt・専用Edgeプロファイルは保持します。
+起動表示の0.2.15を確認してください。既存設定・`token.txt`・専用Edgeプロファイルは保持します。
 Setupの再実行やAPIキー変更は不要です。M365_RELAY_HOME / M365_BRIDGE_HOMEの指定は従来と同じ値を使います。
 途中まで入力された依頼は手動送信せず、その旧タブを閉じてください。
 
 ## 検証範囲
 
-CIでLinux/Windowsの既存・追加スキーマテスト、実ブラウザーの模擬画面回帰テスト、
-WindowsでPATHのNodeを除いた同梱Node配布試験を実行します。結果は対象コミットのActionsログで確認します。
-設定・キーの再初期化時保持、配布文書と版・コミットの整合、欠落・破損時の停止も配布試験の対象です。
-入力が欠けた場合は再挿入せず送信を停止し、本文を含まない診断のみを返します。
+ローカルでは`node --test`と`node scripts/check.mjs`を通過済みです。
+実VS Code＋実M365で、通常会話の往復、長文一括入力、送信待機、VS Code標準ツールの呼び出し実行までは確認しました。
+一方、PDF本文抽出のようにVS Code側の利用可能ツール・依存関係に左右される複数ラウンド作業の安定完走は継続検証中です。
 
-実ブラウザー試験はabout:blankの模擬入力欄・模擬回答を使用します。
-実M365・VS Codeの通し動作、M365の入力上限・応答品質、社内端末での受入は未確認です。
-詳細は[input-compatibility.md](input-compatibility.md)と[schema-compatibility.md](schema-compatibility.md)を参照してください。
+入力が欠けた場合は再挿入せず送信を停止し、本文を含まない診断のみを返します。
+送信済み・結果不明の要求は自動再送しません。
+
+実M365のDOM互換性は[dom-compatibility.md](dom-compatibility.md)を参照してください。
