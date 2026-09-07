@@ -59,7 +59,7 @@ async function main(){
     const template=await readFile(join(ROOT,'prompts','m365-tool-router.md'),'utf8');
     const ledger=new Ledger(config.home,config.token);await ledger.load();
     const log=record=>console.log(JSON.stringify({time:new Date().toISOString(),...record}));
-    server=createBridgeServer({config,template,backend:new M365Backend(config),ledger,log});
+    server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log}),ledger,log});
     const shutdown=async()=>{await server.stop();await unlock();process.exit(0);};
     process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(config.port,'127.0.0.1',resolve);});

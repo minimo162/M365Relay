@@ -48,9 +48,9 @@ function fixture({origin=config.origin,oldReply='',dropInput=false,wrongReply=fa
   };
   return {events,state,editor,reply,nodes,context,browser};
 }
-async function execute(f,{signal=AbortSignal.timeout(1500)}={}){
+async function execute(f,{signal=AbortSignal.timeout(1500),onMetrics}={}){
   const request=prepareRequest({model:MODEL,messages:[{role:'user',content:'test'}]},'test template');f.state.requestId=request.requestId;
-  const backend=new M365Backend(config,{connect:async()=>f.browser,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3});
+  const backend=new M365Backend(config,{connect:async()=>f.browser,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3,onMetrics});
   return backend.complete(request,{signal,onBeforeSend:async()=>f.events.push('journaled-before-send')});
 }
 test('CDP endpoint requires exact loopback port and browser path',()=>{
@@ -93,6 +93,36 @@ test('Scriptor code lines exclude gutters and reject virtualized gaps or incompl
 test('mock DOM: exact input, one send, validated answer, closes only its owned tab',async()=>{
   const f=fixture();const raw=await execute(f);assert.equal(JSON.parse(raw).content,'fixture final');assert.equal(f.state.sent,1);
   assert(f.events.indexOf('journaled-before-send')<f.events.indexOf('clicked'));assert.deepEqual(f.state.closed,['owned-target']);
+});
+
+test('timings describe success and pre-send failure without prompt or response contents',async()=>{
+ const success=[],f=fixture();await execute(f,{onMetrics:m=>success.push(m)});
+ assert.equal(success.length,1);const m=success[0];assert.equal(m.outcome,'success');assert.equal(m.possibly_sent,true);
+ assert(m.total_ms>=0);assert(m.response_snapshots>=2);assert(m.first_reply_observed_ms!==null);
+ assert(Object.values(m.phase_ms).every(v=>Number.isSafeInteger(v)&&v>=0));
+ assert(!JSON.stringify(m).includes('test template'));assert(!JSON.stringify(m).includes('fixture final'));
+ const failure=[];await assert.rejects(execute(fixture({dropInput:true}),{onMetrics:m=>failure.push(m)}),{code:'input_mismatch'});
+ assert.equal(failure.length,1);assert.equal(failure[0].outcome,'error');assert.equal(failure[0].possibly_sent,false);assert.equal(failure[0].response_snapshots,0);
+});
+
+test('a failing timing sink does not turn a successful send into a retryable failure',async()=>{
+ for(const onMetrics of [async()=>{throw new Error('sink unavailable');},()=>new Promise(()=>{})]){
+  const f=fixture();const raw=await execute(f,{onMetrics});
+  assert.equal(JSON.parse(raw).content,'fixture final');assert.equal(f.state.sent,1);
+ }
+});
+
+test('a complete response is not returned while generation is still busy',async()=>{
+ const f=fixture();const original=f.browser.send;let responseReads=0;
+ const stop={...f.reply};
+ f.browser.send=async(...args)=>{
+  if(f.state.sent&&args[0]==='Runtime.evaluate')f.nodes[config.selectors.stop[0]]=responseReads<3?[stop]:[];
+  const out=await original(...args);
+  if(f.state.sent&&out.result?.value?.candidates)responseReads++;
+  return out;
+ };
+ const raw=await execute(f);assert.equal(JSON.parse(raw).content,'fixture final');
+ assert(responseReads>=4);assert.equal(f.state.sent,1);
 });
 test('mock DOM: restored old conversation is reset before request',async()=>{
   const f=fixture({oldReply:'old conversation'});await execute(f);assert(f.events.includes('newChat'));assert.equal(f.state.sent,1);

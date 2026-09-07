@@ -5,12 +5,16 @@ import { parseEnvelope } from './protocol.mjs';
 import { assert, BridgeError, delay, abortReason } from './errors.mjs';
 
 export class M365Backend {
-  constructor(config,{connect=connectOwnedBrowser,inputSettleMs=8000,inputPollMs=75,inputStableMs=250,sendReadyMs=15000,sendReadyStableMs=250}={}){
-    this.config=config;this.connect=connect;
+  constructor(config,{connect=connectOwnedBrowser,inputSettleMs=8000,inputPollMs=75,inputStableMs=250,sendReadyMs=15000,sendReadyStableMs=250,onMetrics=()=>{},responsePollMs=config.pollIntervalMs,responseStableMs=config.stableMs}={}){
+    this.config=config;this.connect=connect;this.onMetrics=onMetrics;
     this.inputTiming={inputSettleMs,inputPollMs,inputStableMs,sendReadyMs,sendReadyStableMs};
+    this.responseTiming={responsePollMs,responseStableMs};
   }
   async complete(request,{signal,onBeforeSend}) {
-    const config=this.config;let browser,targetId,sessionId,sent=false,success=false,failure,phase='connect';
+    const config=this.config;let browser,targetId,sessionId,sent=false,success=false,failure,phase = 'connect';
+    const started=performance.now();let phaseStarted=started,snapshots=0,firstReplyMs=null,lastReplyChangeMs=null;
+    const durations={};
+    const enter=next=>{const now=performance.now();durations[phase]=(durations[phase]??0)+(now-phaseStarted);phase=next;phaseStarted=now;};
     const evaluate=async(operation,args={},s=signal)=>{
       const r=await browser.send('Runtime.evaluate',{expression:domExpression(config,operation,args),returnByValue:true,userGesture:true},sessionId,s,15000);
       const fail=raw=>{
@@ -64,10 +68,10 @@ export class M365Backend {
       throw inputFailure('input_mismatch',last,expected.length);
     };
     try {
-      phase='connect';browser=await this.connect(config,signal);
-      phase='open_tab';({targetId}=await browser.send('Target.createTarget',{url:config.copilotUrl,background:false},undefined,signal));
-      phase='attach_tab';({sessionId}=await browser.send('Target.attachToTarget',{targetId,flatten:true},undefined,signal));
-      phase='wait_editor';const deadline=Date.now()+config.readyTimeoutMs;let state;
+      enter('connect');browser=await this.connect(config,signal);
+      enter('open_tab');({targetId}=await browser.send('Target.createTarget',{url:config.copilotUrl,background:false},undefined,signal));
+      enter('attach_tab');({sessionId}=await browser.send('Target.attachToTarget',{targetId,flatten:true},undefined,signal));
+      enter('wait_editor');const deadline=Date.now()+config.readyTimeoutMs;let state;
       while(Date.now()<deadline){
         abortReason(signal);
         const loc=await browser.send('Runtime.evaluate',{expression:'location.origin',returnByValue:true},sessionId,signal);
@@ -78,7 +82,7 @@ export class M365Backend {
       }
       assert(state?.editor,'editor_not_ready','M365入力欄を確認できません。専用Edgeを前面表示してサインインを確認してください。',503);
       // Root navigation can restore an old conversation. Never assume a new tab is a new chat.
-      if(state.nonempty || state.input.trim() || state.busy){phase='reset_conversation';
+      if(state.nonempty || state.input.trim() || state.busy){enter('reset_conversation');
         assert((await evaluate('newChat')).clicked,'new_chat_required','空の会話を確保できません。既存の会話や入力欄は上書きしません。',409);
         const resetDeadline=Date.now()+15000;
         do {await delay(config.pollIntervalMs,signal);state=await evaluate('snapshot');if(state.editor&&!state.nonempty&&!state.input.trim()&&!state.busy)break;}while(Date.now()<resetDeadline);
@@ -87,14 +91,14 @@ export class M365Backend {
       // One CDP text insertion behaves like a paste without touching the user's clipboard.
       // There is no per-chunk typing loop: insert once, then verify the complete prompt
       // repeatedly until the DOM is stable. On mismatch we never insert again.
-      phase='input_before';const before=await checkInput('');
+      enter('input_before');const before=await checkInput('');
       if(!before.matched)throw inputFailure('input_changed',before,0);
-      phase='input_focus';assert((await evaluate('focus')).focused,'focus_failed','入力欄へフォーカスできません。',502);
-      phase='input_insert';await browser.send('Input.insertText',{text:request.prompt},sessionId,signal,30000);
-      phase='input_settle';await settleInput(request.prompt);
+      enter('input_focus');assert((await evaluate('focus')).focused,'focus_failed','入力欄へフォーカスできません。',502);
+      enter('input_insert');await browser.send('Input.insertText',{text:request.prompt},sessionId,signal,30000);
+      enter('input_settle');await settleInput(request.prompt);
       // A very large single insertion can be text-complete before M365 finishes
       // enabling/rendering its send control. Poll read-only; never insert again.
-      phase='send_ready';
+      enter('send_ready');
       {
         const {sendReadyMs,sendReadyStableMs,inputPollMs}=this.inputTiming;
         const until=Date.now()+sendReadyMs;let readySince,last;
@@ -110,19 +114,20 @@ export class M365Backend {
           await delay(inputPollMs,signal);
         }while(true);
       }
-      phase='before_send';await onBeforeSend();sent=true; // Conservative: the following click may succeed even if its result is lost.
-      phase='send';const clicked=await evaluate('send',{expected:request.prompt});
+      enter('before_send');await onBeforeSend();sent=true; // Conservative: the following click may succeed even if its result is lost.
+      enter('send');const clicked=await evaluate('send',{expected:request.prompt});
       if(clicked.input&&!clicked.input.matched)throw inputFailure('input_changed',clicked.input,request.prompt.length);
       assert(clicked.clicked,'send_unknown','送信クリックの結果が不明です。',502);
       let lastKey='',stableSince=Date.now(),lastError;
-      phase='response_wait';while(true){
-        abortReason(signal);await delay(config.pollIntervalMs,signal);
-        state=await evaluate('snapshot');
+      enter('response_wait');while(true){
+        abortReason(signal);await delay(this.responseTiming.responsePollMs,signal);
+        state=await evaluate('snapshot');snapshots++;
+        if(state.nonempty&&firstReplyMs===null)firstReplyMs=performance.now()-started;
         const key=JSON.stringify(state.candidates);
-        if(key!==lastKey){lastKey=key;stableSince=Date.now();}
-        if(state.busy || !state.nonempty || Date.now()-stableSince<config.stableMs)continue;
+        if(key!==lastKey){lastKey=key;stableSince=Date.now();lastReplyChangeMs=performance.now()-started;}
+        if(state.busy || !state.nonempty || Date.now()-stableSince<this.responseTiming.responseStableMs)continue;
         // A strict assistant-only DOM selector is mandatory. No document.body fallback.
-        phase='response_validate';for(const candidate of state.candidates){
+        enter('response_validate');for(const candidate of state.candidates){
           try{parseEnvelope(candidate,request);success=true;return candidate;}
           catch(error){lastError=error;}
         }
@@ -134,7 +139,7 @@ export class M365Backend {
       throw failure;
     } finally {
       // Only our owned request tab is stopped/closed. Never terminate Edge or touch other apps.
-      phase='cleanup';if(browser&&sessionId&&sent&&!success){
+      enter('cleanup');if(browser&&sessionId&&sent&&!success){
         try{await evaluate('stop',{},AbortSignal.timeout(2000));}catch{}
       }
       // Pre-send failures are safe to close because nothing was submitted. Keep a
@@ -145,6 +150,15 @@ export class M365Backend {
         try{await browser.send('Target.closeTarget',{targetId},undefined,AbortSignal.timeout(2000),2000);}catch{}
       }
       browser?.close();
+      const finished=performance.now();
+      durations[phase]=(durations[phase]??0)+(finished-phaseStarted);
+      const metrics={event:'backend_timing',request_id:request.requestId,
+        outcome:success?'success':signal?.aborted?'cancelled':'error',possibly_sent:sent,
+        total_ms:Math.round(finished-started),phase_ms:Object.fromEntries(Object.entries(durations).map(([k,v])=>[k,Math.round(v)])),
+        response_snapshots:snapshots,first_reply_observed_ms:firstReplyMs===null?null:Math.round(firstReplyMs),
+        last_reply_change_observed_ms:lastReplyChangeMs===null?null:Math.round(lastReplyChangeMs)};
+      // Telemetry must never turn a completed operation into an apparent failure.
+      try{Promise.resolve(this.onMetrics(metrics)).catch(()=>{});}catch{}
     }
   }
 }
