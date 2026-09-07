@@ -79,6 +79,16 @@ async function page(){
 }
 async function put(p,text){await p.op('focus');await control.send('Input.insertText',{text},p.sessionId);}
 
+test('actual browser: indexed M365 code DOM preserves data and rejects gaps',async()=>{
+ const p=await page();try{
+  const rows=['BRIDGE_FINAL_V2 11111111-1111-4111-8111-111111111111','  C:\\Work\\.local\\a_b.txt\t日本語😀  ','END_BRIDGE_FINAL_V2'];
+  await p.evalJS(`(()=>{const reply=document.querySelector('[data-message-author-role]');const root=document.createElement('div');root.setAttribute('data-virtualized-code-find-root','true');const box=document.createElement('div');box.setAttribute('role','textbox');box.setAttribute('aria-readonly','true');${JSON.stringify(rows)}.forEach((text,i)=>{const gutter=document.createElement('div');gutter.textContent=String(i+1);const line=document.createElement('div');line.setAttribute('data-line-index',String(i));line.textContent=text;box.append(gutter,line);});root.append(box);reply.append(root);})()`);
+  assert.equal((await p.op('snapshot')).candidates[0],rows.join('\n'));
+  await p.evalJS(`document.querySelector('[data-line-index="1"]').remove()`);
+  assert.equal((await p.op('snapshot')).candidates.length,0);
+ }finally{await p.close();}
+});
+
 // Inspect exact text, not a whitespace-stripped/percentage approximation.
 test('first 3000 characters preserve paragraph text independently of current prompt length',async()=>{
  const p=await page();try{

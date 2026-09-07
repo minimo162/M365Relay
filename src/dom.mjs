@@ -73,6 +73,27 @@ export function browserOperation(origin,selectors,operation,args={}) {
       const nodes=docs.flatMap(d=>Array.from(d.querySelectorAll(selector)));
       for(let i=nodes.length-1;i>=0;i--){
         const t=read(nodes[i]).trim();if(!t)continue;
+        // M365's Scriptor renderer is not <pre><code>: line numbers are siblings
+        // of indexed code lines. Read only those lines, in contiguous DOM order.
+        // A virtualized prefix is not a complete answer. Require a transport end
+        // marker, and never fall back to the rendered text with gutter labels.
+        const indexed=[...nodes[i].querySelectorAll('[data-virtualized-code-find-root] [role="textbox"][aria-readonly="true"]')];
+        if(indexed.length){
+          const candidates=[];
+          for(const box of indexed){
+            const lines=[...box.querySelectorAll('[data-line-index]')];
+            if(!lines.length||lines.some((line,index)=>line.getAttribute('data-line-index')!==String(index)))continue;
+            const body=lines.map(line=>line.textContent??'').join('\n');
+            const head=/^BRIDGE_(TOOL|FINAL_V2)\s+[a-f0-9-]{36}(?:\s|$)/i.exec(body);
+            if(!head)continue;
+            // Scriptor may append blank indexed rows (NBSP placeholders). They
+            // are outside the terminal marker, not part of an argument value.
+            const last=lines.findLast(line=>(line.textContent??'').trim());
+            if((last?.textContent??'').trim().toUpperCase()!==`END_BRIDGE_${head[1].toUpperCase()}`)continue;
+            candidates.push(body);
+          }
+          return {candidates:[...new Set(candidates)],nonempty:true};
+        }
         const code=[...nodes[i].querySelectorAll('pre code,pre')].map(e=>(e.textContent||'').trim()).filter(Boolean);
         return {candidates:[...new Set([...code,t])],nonempty:true};
       }

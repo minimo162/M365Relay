@@ -74,6 +74,22 @@ test('DOM ambiguity stops rather than selecting an arbitrary editor',()=>{
   const f=fixture();f.nodes[config.selectors.editor[0]].push({...f.editor});
   assert.throws(()=>vm.runInContext(`(${browserOperation.toString()})(${JSON.stringify(config.origin)},${JSON.stringify(config.selectors)},'snapshot',{})`,f.context));
 });
+
+test('Scriptor code lines exclude gutters and reject virtualized gaps or incomplete replies',()=>{
+ const id='11111111-1111-4111-8111-111111111111';
+ const rows=[`BRIDGE_FINAL_V2 ${id}`,'  literal \\_ path\\.local  ','END_BRIDGE_FINAL_V2'];
+ const f=fixture({oldReply:'Plain Text\n1\n'+rows.join('\n2\n')});
+ let indices=[0,1,2];
+ const box={querySelectorAll:()=>rows.map((textContent,i)=>({textContent,getAttribute:()=>String(indices[i])}))};
+ f.reply.querySelectorAll=s=>s.startsWith('[data-virtualized')?[box]:[];
+ const snapshot=()=>vm.runInContext(`(${browserOperation.toString()})(${JSON.stringify(config.origin)},${JSON.stringify(config.selectors)},'snapshot',{})`,f.context);
+ assert.equal(snapshot().candidates[0],rows.join('\n'));
+ rows.push('\u00a0');indices.push(3);assert.equal(snapshot().candidates[0],rows.join('\n'));rows.pop();indices.pop();
+ indices=[0,2,3];assert.equal(snapshot().candidates.length,0);
+ indices=[1,2,3];assert.equal(snapshot().candidates.length,0);
+ indices=[0,1,2];rows[2]='END_BRIDGE_TOOL';assert.equal(snapshot().candidates.length,0);
+ rows.pop();assert.equal(snapshot().candidates.length,0);
+});
 test('mock DOM: exact input, one send, validated answer, closes only its owned tab',async()=>{
   const f=fixture();const raw=await execute(f);assert.equal(JSON.parse(raw).content,'fixture final');assert.equal(f.state.sent,1);
   assert(f.events.indexOf('journaled-before-send')<f.events.indexOf('clicked'));assert.deepEqual(f.state.closed,['owned-target']);
