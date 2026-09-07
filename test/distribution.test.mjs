@@ -12,6 +12,7 @@ test('runtime lock pins the official archive and extracted executable',async()=>
 test('launcher uses verified bundled runtime without PATH fallback or download',async()=>{
   const cmd=await read('Bridge.cmd'),ps=await read('scripts/Launch.ps1');
   assert.match(cmd,/SystemRoot/); assert.match(cmd,/NODE_OPTIONS=/); assert.match(cmd,/NODE_PATH=/);
+  assert.match(cmd,/PSModulePath=%SystemRoot%\\System32\\WindowsPowerShell\\v1\.0\\Modules/);
   assert.doesNotMatch(cmd,/where node|^node\.exe/im);
   assert.match(ps,/Verify-Distribution/); assert.match(ps,/runtime\\node\.exe/);
   assert.doesNotMatch(cmd+ps,/Invoke-WebRequest|https:\/\/|Package-Release/);
