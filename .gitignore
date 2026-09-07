@@ -1,0 +1,14 @@
+node_modules/
+runtime/
+.state/
+.local/
+.cache/
+dist/
+*.log
+*.zip
+*.vsix
+config/settings.local.json
+release-manifest.json
+token.txt
+requests.json
+edge-profile/

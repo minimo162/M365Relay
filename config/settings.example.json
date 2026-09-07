@@ -1,0 +1,18 @@
+{
+  "port": 8731,
+  "cdpPort": 9336,
+  "copilotUrl": "https://m365.cloud.microsoft/chat/",
+  "maxPromptChars": 180000,
+  "requestTimeoutMs": 300000,
+  "readyTimeoutMs": 45000,
+  "pollIntervalMs": 1500,
+  "stableMs": 3000,
+  "maxQueue": 4,
+  "selectors": {
+    "editor": ["#m365-chat-editor-target-element", "[data-lexical-editor=\"true\"][contenteditable]", "[role=\"textbox\"][contenteditable]"],
+    "assistant": ["[data-testid=\"markdown-reply\"]", "[data-content=\"ai-message\"]", "[data-message-author-role=\"assistant\"]", "[role=\"article\"][data-author=\"assistant\"]"],
+    "send": ["button[aria-label=\"送信\"]", "button[aria-label=\"Send\"]", "button[title=\"送信\"]", "button[title=\"Send\"]"],
+    "newChat": ["button[aria-label=\"新しいチャット\"]", "button[aria-label=\"New chat\"]", "button[title=\"新しいチャット\"]"],
+    "stop": ["button[aria-label*=\"生成を停止\"]", "button[aria-label=\"停止\"]", "button[aria-label*=\"Stop generating\" i]", "button[aria-label=\"Stop\"]"]
+  }
+}
