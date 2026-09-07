@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile,mkdir,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,mkdir,rm,realpath,symlink} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {EventEmitter} from 'node:events';
@@ -48,7 +48,7 @@ test('workspace arguments are validated and launching never interprets them thro
  await launchDesktop(plan,{spawnProcess:(exe,args,options)=>{
   captured={exe,args,options};const child=new EventEmitter();child.unref=()=>{};queueMicrotask(()=>child.emit('spawn'));return child;
  }});
- assert.deepEqual(captured.args,['--user-data-dir',plan.userDataDir,'--new-window',resolve(folder)]);
+ assert.deepEqual(captured.args,['--user-data-dir',plan.userDataDir,'--new-window',await realpath(folder)]);
  assert.equal(captured.options.shell,false);assert.equal(captured.options.env.ELECTRON_RUN_AS_NODE,undefined);
  assert(!JSON.stringify(captured.args).includes(c.token));
 });
@@ -64,4 +64,19 @@ test('old generated utility default migrates without changing a customized selec
  await prepareDesktop(c);assert.equal(JSON.parse(await readFile(settingsPath,'utf8'))['chat.byokUtilityModelDefault'],'none');
  await writeFile(settingsPath,JSON.stringify({'chat.byokUtilityModelDefault':'mainAgent','chat.utilityModel':'customendpoint/user-model'}));
  await prepareDesktop(c);const s=JSON.parse(await readFile(settingsPath,'utf8'));assert.equal(s['chat.byokUtilityModelDefault'],'mainAgent');assert.equal(s['chat.utilityModel'],'customendpoint/user-model');
+});
+
+test('desktop opens the real directory of a workspace link without changing access settings',async t=>{
+ const c=await fixture(t),target=join(c.home,'actual'),link=join(c.home,'linked');
+ await mkdir(target);await writeFile(join(target,'sample.txt'),'preserve');
+ await symlink(target,link,process.platform==='win32'?'junction':'dir');
+ const plan=await prepareDesktop(c,{workspace:link});assert.equal(plan.workspace,await realpath(target));
+ assert.equal(await readFile(join(plan.workspace,'sample.txt'),'utf8'),'preserve');
+ const settings=JSON.parse(await readFile(join(plan.userDataDir,'User','settings.json'),'utf8'));
+ assert(!Object.keys(settings).some(k=>/trust|allow|approve|access/i.test(k)));
+});
+
+test('unresolvable workspace fails rather than opening a guessed location',async t=>{
+ const c=await fixture(t);
+ await assert.rejects(prepareDesktop(c,{resolveRealPath:async()=>{throw new Error('denied');}}),{code:'workspace_resolution_failed'});
 });

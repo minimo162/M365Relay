@@ -1,4 +1,4 @@
-import {readFile,writeFile,mkdir,rename,unlink,stat,access} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rename,unlink,stat,access,realpath} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
@@ -32,7 +32,7 @@ export async function findVSCode({env=process.env,exists=access}={}){
  throw new BridgeError('vscode_not_found','Visual Studio Codeが見つかりません。会社で利用できるVS Codeを用意してから、Run.cmdをもう一度実行してください。ポータブル版はM365_RELAY_CODEでCode.exeを指定できます。',503);
 }
 
-export async function prepareDesktop(config,{workspace,executable}={}){
+export async function prepareDesktop(config,{workspace,executable,resolveRealPath=realpath}={}){
  // This is a dedicated --user-data-dir, not the user's normal VS Code profile.
  const userDataDir=join(config.home,'vscode-data');
  const userDir=join(userDataDir,'User');
@@ -45,6 +45,14 @@ export async function prepareDesktop(config,{workspace,executable}={}){
   try{await writeFile(join(folder,'はじめに.md'),
    '# M365Relay\n\n1. 専用EdgeでM365 Copilotにサインインします。\n2. VS CodeのチャットでM365Relayを選び、依頼を入力します。\n3. 作業する別のフォルダーは「ファイル → フォルダーを開く」で選べます。\n\nVS Codeの承認画面で操作内容を確認してください。最初は非機密のファイルで動作を確認します。\n接続を終了するには、M365Relayの起動ウィンドウでCtrl+Cを押します。\n',
    {flag:'wx',mode:0o600});}catch(e){if(e.code!=='EEXIST')throw e;}
+ }
+ // Native async realpath also resolves Windows packaged-app redirection. A
+ // nominal AppData path can refer to the same file but lie outside the physical
+ // workspace used by VS Code's file checks. Open the actual directory rather
+ // than relaxing those checks or adding an external-read allowlist.
+ let actualFolder;
+ try{actualFolder=await resolveRealPath(folder);}catch{
+  throw new BridgeError('workspace_resolution_failed','作業フォルダーの実際の保存先を確認できません。アクセスできるフォルダーを選んでください。',400);
  }
  await mkdir(userDir,{recursive:true});
  await updateJson(join(userDir,'chatLanguageModels.json'),groups=>{
@@ -73,7 +81,7 @@ export async function prepareDesktop(config,{workspace,executable}={}){
   return {'chat.byokUtilityModelDefault':'none','chat.utilityModel':'customendpoint/m365-copilot-ui',
     ...(oldGeneratedDefault?{}:settings)};
  });
- return {executable,userDataDir,workspace:folder};
+ return {executable,userDataDir,workspace:actualFolder};
 }
 
 export async function launchDesktop(plan,{spawnProcess=spawn}={}){
