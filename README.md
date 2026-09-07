@@ -39,6 +39,8 @@ GitHubのCode → Download ZIP / Source code (zip)はNode.jsを含まないた�
 
 ## 初回起動
 
+管理者が自動更新用の配布先を用意した場合は、`M365Relay.cmd`を開くだけで本体をローカルへ取得・更新して起動できます。起動ファイルと本体を分ける配置方法は[自動更新の配布手順](docs/auto-update.md)を参照してください。以下は本体ZIPを直接展開して使う場合の手順です。
+
 1. `Run.cmd`を開きます。設定・接続キー・専用VS Code設定を自動で作成し、EdgeとVS Codeを起動します。
 2. 専用EdgeでM365へ手動サインインします。VS Codeの初回案内では「Continue without Signing In」を選べます。GitHubへのサインインは不要です。
 3. VS CodeのチャットでM365Relayを選び、依頼を入力します。エージェントの操作の承認は画面で確認します。
