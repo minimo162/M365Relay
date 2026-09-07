@@ -28,7 +28,8 @@ LiteParse 2.14.4 (Apache-2.0), its Windows x64 native package/PDFium, and comman
 are included under `runtime/liteparse/node_modules`. Source: https://github.com/run-llama/liteparse
 Exact package versions, download URLs and integrity hashes are recorded in
 `runtime/liteparse/package-lock.json`. The current candidate is not promoted to the
-update channel: the upstream npm package omits its LICENSE text, and the native
-engine's complete redistribution notices still need to be gathered and verified.
+update channel: the missing LiteParse LICENSE and matching PDFium build notices
+have been added under `runtime/liteparse/notices`, but the Rust/Tesseract module's
+remaining redistribution notices still need to be gathered and verified.
 OCR is disabled in the bundled PDF command; no OCR server or cloud parser is configured.
 The embedded native engine includes third-party code whose notices must remain with it.

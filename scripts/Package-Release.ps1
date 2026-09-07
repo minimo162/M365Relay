@@ -60,8 +60,15 @@ try {
     $pdfRuntime=Join-Path $runtime 'liteparse'
     New-Item -ItemType Directory -Path $pdfRuntime | Out-Null
     Copy-Item -LiteralPath (Join-Path $root 'pdf-runtime/package.json'),(Join-Path $root 'pdf-runtime/package-lock.json') -Destination $pdfRuntime
-    & (Join-Path $runtime 'node.exe') (Join-Path $buildNpm 'bin/npm-cli.js') ci --prefix $pdfRuntime --omit=dev --ignore-scripts --no-audit --no-fund
+    & (Join-Path $runtime 'node.exe') (Join-Path $buildNpm 'bin/npm-cli.js') ci --prefix $pdfRuntime --omit=dev --ignore-scripts --no-audit --no-fund --bin-links=false
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $pdfRuntime 'node_modules/@llamaindex/liteparse-win32-x64-msvc/pdfium.dll'))) { throw 'Pinned PDF runtime installation failed.' }
+    # The top-level npm tarball also contains Linux artifacts; Windows uses its
+    # exact optional platform package. No generic recursive pruning is used.
+    foreach($unused in @('libpdfium.so','liteparse.linux-x64-gnu.node')) {
+        $unusedPath=Join-Path $pdfRuntime ('node_modules/@llamaindex/liteparse/'+$unused)
+        if (Test-Path -LiteralPath $unusedPath) { Remove-Item -LiteralPath $unusedPath -Force }
+    }
+    Copy-Item -LiteralPath (Join-Path $root 'third_party/liteparse') -Destination (Join-Path $pdfRuntime 'notices') -Recurse
     # Curated distribution: never copy local settings, tokens, profiles, logs or npm.
     foreach ($relative in @('src','prompts','config','README.md','THIRD_PARTY.md','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd','Open-Copilot.cmd','Start-Bridge.cmd','package.json')) {
         if ($relative -in @('src','prompts','config')) {
