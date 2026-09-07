@@ -27,6 +27,8 @@ M365Relay's distribution manages its version. Rendering can require an external 
 LiteParse 2.14.4 (Apache-2.0), its Windows x64 native package/PDFium, and commander
 are included under `runtime/liteparse/node_modules`. Source: https://github.com/run-llama/liteparse
 Exact package versions, download URLs and integrity hashes are recorded in
-`runtime/liteparse/package-lock.json`. Upstream package license files are preserved.
+`runtime/liteparse/package-lock.json`. The current candidate is not promoted to the
+update channel: the upstream npm package omits its LICENSE text, and the native
+engine's complete redistribution notices still need to be gathered and verified.
 OCR is disabled in the bundled PDF command; no OCR server or cloud parser is configured.
 The embedded native engine includes third-party code whose notices must remain with it.
