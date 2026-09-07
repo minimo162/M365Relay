@@ -9,6 +9,7 @@ import { M365Backend, diagnoseBrowser } from './m365.mjs';
 import { connectOwnedBrowser } from './cdp.mjs';
 import { BridgeError, publicError, assert } from './errors.mjs';
 import { findVSCode,prepareDesktop,launchDesktop } from './desktop.mjs';
+import { createRunLog } from './run-log.mjs';
 async function openEdge(config){
   assert(process.platform==='win32','windows_required','専用Edgeの自動起動はWindows用です。');
   // Never silently reuse an unrelated debugging port/profile.
@@ -54,13 +55,14 @@ async function main(){
   if(command==='diagnose'){console.log(JSON.stringify(await diagnoseBrowser(config),null,2));return;}
   if(command!=='serve'&&command!=='run')throw new BridgeError('unknown_command','help で利用可能なコマンドを確認してください。');
   const unlock=await acquireProcessLock(config.home);
-  let server;
+  let server,runLog;
   try{
     const template=await readFile(join(ROOT,'prompts','m365-tool-router.md'),'utf8');
     const ledger=new Ledger(config.home,config.token);await ledger.load();
-    const log=record=>console.log(JSON.stringify({time:new Date().toISOString(),...record}));
+    runLog=await createRunLog(config.home,{jsonConsole:process.env.M365_RELAY_JSON_LOGS==='1'});
+    const log=record=>runLog.log(record);
     server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log}),ledger,log});
-    const shutdown=async()=>{await server.stop();await unlock();process.exit(0);};
+    const shutdown=async()=>{await server.stop();await runLog.flush();await unlock();process.exit(0);};
     process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(config.port,'127.0.0.1',resolve);});
     if(desktop){
@@ -70,6 +72,7 @@ async function main(){
     }
     const {version}=JSON.parse(await readFile(join(ROOT,'package.json'),'utf8'));
     console.log(`M365Relay ${version} (実M365で基本往復確認済み・ツール通し動作は検証中)\nEndpoint: http://127.0.0.1:${config.port}/v1/chat/completions\n終了: Ctrl+C`);
-  }catch(error){if(server?.listening)await server.stop();await unlock();throw error;}
+    if(runLog.path)console.log('診断ログ: '+runLog.path);
+  }catch(error){if(server?.listening)await server.stop();await runLog?.flush();await unlock();throw error;}
 }
 main().catch(error=>{console.error(JSON.stringify({error:publicError(error)}));process.exitCode=1;});
