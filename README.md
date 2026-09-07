@@ -69,7 +69,7 @@ API種類は **Chat Completions**、キーは利用者ローカルの`token.txt`
   "url": "http://127.0.0.1:8731/v1/chat/completions",
   "toolCalling": true,
   "vision": false,
-  "maxInputTokens": 24000,
+  "maxInputTokens": 28000,
   "maxOutputTokens": 8000
 }
 ```
