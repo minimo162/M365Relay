@@ -13,16 +13,24 @@ function fixture({origin=config.origin,oldReply='',dropInput=false,wrongReply=fa
   const document={activeElement:null,defaultView:{getComputedStyle:()=>({display:'block',visibility:'visible'})},
     createRange:()=>({selectNodeContents(){},collapse(){}}),getSelection:()=>({removeAllRanges(){},addRange(){}}),
     querySelectorAll(selector){return nodes[selector]??[];}};
-  function element(text='',click=()=>{}){return {innerText:text,textContent:text,isContentEditable:true,childNodes:[],ownerDocument:document,getBoundingClientRect:()=>({width:100,height:40}),getAttribute:()=>null,querySelectorAll:()=>[],focus(){document.activeElement=this;},click};}
+  function element(text='',click=()=>{}){
+    let content=String(text);
+    const e={nodeType:1,tagName:'DIV',isContentEditable:true,childNodes:[],ownerDocument:document,getBoundingClientRect:()=>({width:100,height:40}),getAttribute:()=>null,querySelectorAll:()=>[],focus(){document.activeElement=this;},click};
+    const sync=()=>{e.childNodes=content?[{nodeType:3,nodeValue:content}]:[];};
+    Object.defineProperties(e,{
+      innerText:{get(){return content;},set(v){content=String(v);sync();},configurable:true},
+      textContent:{get(){return content;},set(v){content=String(v);sync();},configurable:true}
+    });
+    sync();return e;
+  }
   const editor=element(),reply=element(oldReply);
-  Object.defineProperty(editor,'childNodes',{get(){return this._children??[]},set(v){this._children=v}});editor.childNodes=[];
   nodes[config.selectors.editor[0]]=[editor];nodes[config.selectors.assistant[0]]=[reply];
   const send=element('送信',()=>{
-    state.sent++;events.push('clicked');editor.innerText='';editor.textContent='';editor.childNodes=[];
+    state.sent++;events.push('clicked');editor.innerText='';
     reply.innerText=wrongReply?'not JSON':JSON.stringify({protocol:PROTOCOL,request_id:state.requestId,action:'final',content:'fixture final',tool_calls:[],complete:true});
     if(loseSend)throw new Error('reply lost');
   });
-  const reset=element('新しいチャット',()=>{events.push('newChat');reply.innerText='';reply.textContent='';editor.innerText='';editor.textContent='';editor.childNodes=[];});
+  const reset=element('新しいチャット',()=>{events.push('newChat');reply.innerText='';editor.innerText='';});
   nodes[config.selectors.send[0]]=[send];nodes[config.selectors.newChat[0]]=[reset];
   const context=vm.createContext({location:{origin},document});
   const browser={
@@ -34,10 +42,7 @@ function fixture({origin=config.origin,oldReply='',dropInput=false,wrongReply=fa
       if(method==='Runtime.evaluate'){
         try{return{result:{value:vm.runInContext(params.expression,context)}};}catch{return{exceptionDetails:{text:'page error'}};}
       }
-      if(method==='Input.insertText'){
-        if(!dropInput){editor.innerText+=params.text;editor.textContent+=params.text;editor.childNodes=[{nodeType:3,nodeValue:editor.textContent}];}
-        return{};
-      }
+      if(method==='Input.insertText'){if(!dropInput)editor.innerText+=params.text;return{};}
       throw new Error('unexpected method '+method);
     },close(){events.push('close');}
   };
