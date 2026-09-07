@@ -9,7 +9,9 @@ const transportReminder=String.raw`応答の最終確認: ツール引数のjson
 例: 矢印のJSON文字列表現は "x =\u003e x"。実体参照の文字列そのものは "\u0026gt;"。
 この2つを混同しないでください。HTML復号も、その逆のHTMLエンコードもしません。
 ツールを呼ぶ場合はコードブロックのBRIDGE_TOOL形式と今回のrequest_idを使い、json-stringの中に & < > を直接出力しないでください。
-最終回答の場合は指定済みのBRIDGE_FINAL_V2形式を使います。tool_choiceとresponse_formatを守ってください。`;
+最終回答の場合は指定済みのBRIDGE_FINAL_V2形式を使います。tool_choiceとresponse_formatを守ってください。
+作業依頼では、利用者が必須にした未実施の確認・処理を、今回のツールで実行できるなら次のツールを選びます。「未確認」と書くことは必須作業の代わりになりません。
+中止・状況報告・会話要約だけを求める今回の要求はその指定を優先します。実際の拒否・権限不足・情報不足・tool_choice制約で続行できない場合は理由を最終回答します。`;
 const toolName = /^[A-Za-z0-9_.:-]{1,128}$/;
 function textContent(c) {
   if (c === null || c === undefined) return null;
