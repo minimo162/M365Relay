@@ -26,7 +26,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          Get-ChildItem scripts/*.ps1 | ForEach-Object {
+          Get-ChildItem scripts/*.ps1,launcher/*.ps1 | ForEach-Object {
             $tokens = $null; $parseErrors = $null
             $null = [Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors)
             if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
@@ -61,6 +61,20 @@ jobs:
           $zip = @(Get-ChildItem dist/*.zip)
           if ($zip.Count -ne 1) { throw 'Expected exactly one distribution ZIP.' }
           ./scripts/Test-Distribution.ps1 -ZipPath $zip[0].FullName
+      - name: Test launcher installation, update and recovery
+        shell: powershell
+        run: |
+          $zip = @(Get-ChildItem dist/*.zip)
+          ./scripts/Test-Updater.ps1 -FirstZip $zip[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Updater checks failed.' }
+          ./scripts/New-UpdateChannel.ps1 -ZipPath $zip[0].FullName -OutputDirectory dist/update-channel -Source https://github.com/minimo162/M365Relay/releases/latest/download/update.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: M365Relay-auto-update-channel
+          path: dist/update-channel/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: M365Relay-windows-x64

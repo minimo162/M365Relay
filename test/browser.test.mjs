@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { CdpClient,assertWsUrl,verifyBrowserArguments } from '../src/cdp.mjs';
 import { M365Backend } from '../src/m365.mjs';
+import { publicError } from '../src/errors.mjs';
 import { browserOperation } from '../src/dom.mjs';
 import { MODEL,PROTOCOL,prepareRequest } from '../src/protocol.mjs';
 const config=JSON.parse(await readFile(new URL('../config/settings.example.json',import.meta.url),'utf8'));
@@ -48,11 +49,23 @@ function fixture({origin=config.origin,oldReply='',dropInput=false,wrongReply=fa
   };
   return {events,state,editor,reply,nodes,context,browser};
 }
-async function execute(f,{signal=AbortSignal.timeout(1500)}={}){
+async function execute(f,{signal=AbortSignal.timeout(1500),onMetrics,selectModel}={}){
   const request=prepareRequest({model:MODEL,messages:[{role:'user',content:'test'}]},'test template');f.state.requestId=request.requestId;
-  const backend=new M365Backend(config,{connect:async()=>f.browser,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3});
+  const backend=new M365Backend(config,{connect:async()=>f.browser,selectModel,editorStableMs:3,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3,onMetrics});
   return backend.complete(request,{signal,onBeforeSend:async()=>f.events.push('journaled-before-send')});
 }
+
+test('model failure before selection or final send never sends or journals a request',async()=>{
+ for(const finalCheck of [false,true]){
+  const f=fixture();
+  await assert.rejects(execute(f,{selectModel:async({verifyOnly=false})=>{
+   if(verifyOnly===finalCheck)throw new Error('model changed');
+  }}));
+  assert.equal(f.state.sent,0);
+  assert(!f.events.includes('journaled-before-send'));
+  if(!finalCheck)assert(!f.events.includes('Input.insertText'));
+ }
+});
 test('CDP endpoint requires exact loopback port and browser path',()=>{
   assert.equal(assertWsUrl('ws://127.0.0.1:9336/devtools/browser/abc-123',9336),'ws://127.0.0.1:9336/devtools/browser/abc-123');
   for(const url of ['ws://evil.example:9336/devtools/browser/a','ws://127.0.0.1:9337/devtools/browser/a','ws://127.0.0.1:9336/devtools/page/a','ws://u:p@127.0.0.1:9336/devtools/browser/a'])assert.throws(()=>assertWsUrl(url,9336),{code:'untrusted_cdp'});
@@ -74,9 +87,98 @@ test('DOM ambiguity stops rather than selecting an arbitrary editor',()=>{
   const f=fixture();f.nodes[config.selectors.editor[0]].push({...f.editor});
   assert.throws(()=>vm.runInContext(`(${browserOperation.toString()})(${JSON.stringify(config.origin)},${JSON.stringify(config.selectors)},'snapshot',{})`,f.context));
 });
+
+test('editor readiness restarts after node replacement even when both editors are empty',()=>{
+  const f=fixture();let now=0;
+  f.context.Date={now:()=>now};
+  const run=(operation,args={requestId:'one',stableMs:1000})=>vm.runInContext(`(${browserOperation.toString()})(${JSON.stringify(config.origin)},${JSON.stringify(config.selectors)},${JSON.stringify(operation)},${JSON.stringify(args)})`,f.context);
+  assert.equal(run('editorReady').ready,false);
+  now=900;assert.equal(run('editorReady').ready,false);
+  f.nodes[config.selectors.editor[0]]=[{...f.editor}];
+  now=1000;assert.equal(run('editorReady').ready,false);
+  now=1900;assert.equal(run('editorReady').ready,false);
+  now=2000;assert.equal(run('editorReady').ready,true);
+  f.nodes[config.selectors.editor[0]]=[f.editor];
+  assert.equal(run('focus').focused,false);
+  assert.equal(run('editorReady',{requestId:'two',stableMs:1000}).ready,false);
+  assert.equal(f.events.includes('Input.insertText'),false);
+});
+
+test('continuously replaced editor times out without insertion or send',async()=>{
+  const f=fixture(),original=f.browser.send;
+  f.browser.send=async(method,params,...rest)=>{
+    if(method==='Runtime.evaluate'&&params.expression.includes(',"editorReady",'))f.nodes[config.selectors.editor[0]]=[{...f.editor}];
+    return original(method,params,...rest);
+  };
+  await assert.rejects(execute(f),{code:'editor_not_ready'});
+  assert.equal(f.events.includes('Input.insertText'),false);
+  assert.equal(f.state.sent,0);
+  assert.deepEqual(f.state.closed,['owned-target']);
+});
+
+test('readiness DOM exceptions preserve their operation without exposing page errors',async()=>{
+ for(const operation of ['editorReady','sendReady']){
+  const f=fixture(),original=f.browser.send;
+  f.browser.send=async(method,params,...rest)=>{
+   if(method==='Runtime.evaluate'&&params.expression.includes(`,"${operation}",`))return {exceptionDetails:{text:'PRIVATE PAGE CONTENT'}};
+   return original(method,params,...rest);
+  };
+  await assert.rejects(execute(f),error=>{
+   const safe=publicError(error);assert.equal(safe.details.dom_operation,operation);
+   assert(!JSON.stringify(safe).includes('PRIVATE'));return true;
+  });
+  assert.equal(f.state.sent,0);
+ }
+});
+
+test('Scriptor code lines exclude gutters and reject virtualized gaps or incomplete replies',()=>{
+ const id='11111111-1111-4111-8111-111111111111';
+ const rows=[`BRIDGE_FINAL_V2 ${id}`,'  literal \\_ path\\.local  ','END_BRIDGE_FINAL_V2'];
+ const f=fixture({oldReply:'Plain Text\n1\n'+rows.join('\n2\n')});
+ let indices=[0,1,2];
+ const box={querySelectorAll:()=>rows.map((textContent,i)=>({textContent,getAttribute:()=>String(indices[i])}))};
+ f.reply.querySelectorAll=s=>s.startsWith('[data-virtualized')?[box]:[];
+ const snapshot=()=>vm.runInContext(`(${browserOperation.toString()})(${JSON.stringify(config.origin)},${JSON.stringify(config.selectors)},'snapshot',{})`,f.context);
+ assert.equal(snapshot().candidates[0],rows.join('\n'));
+ rows.push('\u00a0');indices.push(3);assert.equal(snapshot().candidates[0],rows.join('\n'));rows.pop();indices.pop();
+ indices=[0,2,3];assert.equal(snapshot().candidates.length,0);
+ indices=[1,2,3];assert.equal(snapshot().candidates.length,0);
+ indices=[0,1,2];rows[2]='END_BRIDGE_TOOL';assert.equal(snapshot().candidates.length,0);
+ rows.pop();assert.equal(snapshot().candidates.length,0);
+});
 test('mock DOM: exact input, one send, validated answer, closes only its owned tab',async()=>{
   const f=fixture();const raw=await execute(f);assert.equal(JSON.parse(raw).content,'fixture final');assert.equal(f.state.sent,1);
   assert(f.events.indexOf('journaled-before-send')<f.events.indexOf('clicked'));assert.deepEqual(f.state.closed,['owned-target']);
+});
+
+test('timings describe success and pre-send failure without prompt or response contents',async()=>{
+ const success=[],f=fixture();await execute(f,{onMetrics:m=>success.push(m)});
+ assert.equal(success.length,1);const m=success[0];assert.equal(m.outcome,'success');assert.equal(m.possibly_sent,true);
+ assert(m.total_ms>=0);assert(m.response_snapshots>=2);assert(m.first_reply_observed_ms!==null);
+ assert(Object.values(m.phase_ms).every(v=>Number.isSafeInteger(v)&&v>=0));
+ assert(!JSON.stringify(m).includes('test template'));assert(!JSON.stringify(m).includes('fixture final'));
+ const failure=[];await assert.rejects(execute(fixture({dropInput:true}),{onMetrics:m=>failure.push(m)}),{code:'input_mismatch'});
+ assert.equal(failure.length,1);assert.equal(failure[0].outcome,'error');assert.equal(failure[0].possibly_sent,false);assert.equal(failure[0].response_snapshots,0);
+});
+
+test('a failing timing sink does not turn a successful send into a retryable failure',async()=>{
+ for(const onMetrics of [async()=>{throw new Error('sink unavailable');},()=>new Promise(()=>{})]){
+  const f=fixture();const raw=await execute(f,{onMetrics});
+  assert.equal(JSON.parse(raw).content,'fixture final');assert.equal(f.state.sent,1);
+ }
+});
+
+test('a complete response is not returned while generation is still busy',async()=>{
+ const f=fixture();const original=f.browser.send;let responseReads=0;
+ const stop={...f.reply};
+ f.browser.send=async(...args)=>{
+  if(f.state.sent&&args[0]==='Runtime.evaluate')f.nodes[config.selectors.stop[0]]=responseReads<3?[stop]:[];
+  const out=await original(...args);
+  if(f.state.sent&&out.result?.value?.candidates)responseReads++;
+  return out;
+ };
+ const raw=await execute(f);assert.equal(JSON.parse(raw).content,'fixture final');
+ assert(responseReads>=4);assert.equal(f.state.sent,1);
 });
 test('mock DOM: restored old conversation is reset before request',async()=>{
   const f=fixture({oldReply:'old conversation'});await execute(f);assert(f.events.includes('newChat'));assert.equal(f.state.sent,1);
@@ -111,7 +213,7 @@ test('mock DOM: completed input can wait for send readiness without reinsertion'
     return out;
   };
   const request=prepareRequest({model:MODEL,messages:[{role:'user',content:'test'}]},'test template');f.state.requestId=request.requestId;
-  const backend=new M365Backend(config,{connect:async()=>f.browser,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3});
+  const backend=new M365Backend(config,{connect:async()=>f.browser,editorStableMs:3,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3});
   const raw=await backend.complete(request,{signal:AbortSignal.timeout(1500),onBeforeSend:async()=>f.events.push('journaled-before-send')});
   assert.equal(JSON.parse(raw).content,'fixture final');
   assert.equal(f.events.filter(x=>x==='Input.insertText').length,1);

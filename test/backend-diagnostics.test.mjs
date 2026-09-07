@@ -15,3 +15,9 @@ test('unexpected backend exceptions become safe staged bridge errors instead of 
     assert.doesNotMatch(error.message,/SECRET|STACK/);return true;
   });
 });
+
+test('new readiness phases and booleans survive filtering while arbitrary values do not',()=>{
+ for(const phase of ['editor_stable','send_ready'])assert.equal(safeDiagnostics({backend_phase:phase}).backend_phase,phase);
+ assert.deepEqual(safeDiagnostics({stage:'send_ready',button_found:true,button_enabled:false,busy:false,html:'PRIVATE',buttonText:'PRIVATE'}),{stage:'send_ready',button_found:true,button_enabled:false,busy:false});
+ assert.deepEqual(safeDiagnostics({stage:'PRIVATE',backend_phase:'PRIVATE',button_found:'PRIVATE'}),{});
+});

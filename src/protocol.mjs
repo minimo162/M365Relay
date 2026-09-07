@@ -2,17 +2,33 @@ import { randomUUID } from 'node:crypto';
 import { assert, BridgeError } from './errors.mjs';
 import { strictJson, isObject, exactKeys } from './json.mjs';
 import { compileSchema } from './schema.mjs';
+import {decodeImagePart} from './image-input.mjs';
 export const PROTOCOL = 'm365-relay.v1';
 export const MODEL = 'm365-copilot-ui';
+const transportReminder=String.raw`応答の最終確認: ツール引数のjson-stringではUnicodeエスケープを使います。
+文字としてのアンパサンドは \u0026、小なりは \u003c、大なりは \u003e と書きます。
+例: 矢印のJSON文字列表現は "x =\u003e x"。実体参照の文字列そのものは "\u0026gt;"。
+この2つを混同しないでください。HTML復号も、その逆のHTMLエンコードもしません。
+ツールを呼ぶ場合はコードブロックのBRIDGE_TOOL形式と今回のrequest_idを使い、json-stringの中に & < > を直接出力しないでください。
+最終回答の場合は指定済みのBRIDGE_FINAL_V2形式を使います。tool_choiceとresponse_formatを守ってください。
+作業依頼では、利用者が必須にした未実施の確認・処理を、今回のツールで実行できるなら次のツールを選びます。「未確認」と書くことは必須作業の代わりになりません。
+中止・状況報告・会話要約だけを求める今回の要求はその指定を優先します。実際の拒否・権限不足・情報不足・tool_choice制約で続行できない場合は理由を最終回答します。`;
 const toolName = /^[A-Za-z0-9_.:-]{1,128}$/;
-function textContent(c) {
+function textContent(c,context,images,allowImages) {
   if (c === null || c === undefined) return null;
   if (typeof c === 'string') return c;
-  assert(Array.isArray(c) && c.every(p => isObject(p) && p.type === 'text' && typeof p.text === 'string'), 'text_only', '初版はテキストのみです。画像・音声・バイナリは黙って捨てません。');
-  return c.map(p => ({ type: 'text', text: p.text }));
+  assert(Array.isArray(c), 'text_only', '未対応のコンテンツです。');
+  return c.map((p,partIndex)=>{
+    assert(isObject(p),'text_only','未対応のコンテンツです。');
+    if(p.type==='text'&&typeof p.text==='string')return {type:'text',text:p.text};
+    assert(allowImages&&p.type==='image_url','text_only','画像搬送は未有効です。画像・音声・バイナリは黙って捨てません。');
+    return decodeImagePart(p,{...context,partIndex},images);
+  });
 }
 
 function toolRoundInfo(messages) {
+  // This is a retained-history guard, not a durable conversation-wide budget.
+  // Client compaction can remove calls; summary prose is not execution evidence.
   let start=0;
   for(let i=messages.length-1;i>=0;i--){
     if(messages[i]?.role==='user'){start=i+1;break;}
@@ -26,7 +42,7 @@ function toolRoundInfo(messages) {
   }
   return {total,terminal};
 }
-export function prepareRequest(body, promptTemplate, { maxPromptChars = 180000, model = MODEL } = {}) {
+export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, model = MODEL, allowImages=false } = {}) {
   assert(isObject(body) && body.model === model, 'unknown_model', '設定済みのモデル ID を指定してください。');
   assert(Array.isArray(body.messages) && body.messages.length > 0 && body.messages.length <= 512, 'messages_required', 'messages が必要です（最大512件）。');
   assert(body.n === undefined || body.n === 1, 'unsupported_n', 'n=1 のみ対応しています。');
@@ -34,9 +50,10 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 180000, 
   assert(body.stop === undefined || body.stop === null || Array.isArray(body.stop) && body.stop.length === 0, 'unsupported_stop', 'stop による JSON の途中切断には対応していません。');
   assert(!body.functions && !body.function_call, 'legacy_functions', '旧式の functions ではなく tools を使用してください。');
   assert(!body.modalities || body.modalities.length === 1 && body.modalities[0] === 'text', 'text_only', 'テキストのみ対応しています。');
-  const messages = body.messages.map(m => {
+  const images=[];
+  const messages = body.messages.map((m,messageIndex) => {
     assert(isObject(m) && ['system','developer','user','assistant','tool'].includes(m.role), 'invalid_role', '未対応のメッセージ role です。');
-    const out = { role: m.role, content: textContent(m.content) };
+    const out = { role: m.role, content: textContent(m.content,{messageIndex,role:m.role},images,allowImages) };
     if (m.name !== undefined) { assert(typeof m.name === 'string', 'invalid_name', 'name は文字列です。'); out.name = m.name; }
     if (m.role === 'tool') { assert(typeof m.tool_call_id === 'string' && m.tool_call_id.length > 0, 'missing_call_id', 'tool の tool_call_id が必要です。'); out.tool_call_id = m.tool_call_id; }
     if (m.tool_calls !== undefined) {
@@ -87,9 +104,14 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 180000, 
     response_format:format, max_tool_calls_per_response:1,
     generation_hints:Object.fromEntries(['temperature','top_p','max_tokens','max_completion_tokens','reasoning_effort'].filter(k=>body[k]!==undefined).map(k=>[k,body[k]]))
   };
-  const prompt = `${promptTemplate.trim()}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${JSON.stringify(payload)}\n`;
-  assert(prompt.length <= maxPromptChars, 'context_too_large', '会話とツール定義が入力上限を超えました。自動で切り捨てません。利用ツールや対象範囲を減らしてください。', 413);
-  return { body, payload, prompt, requestId, validators, finalValidator, model, stream:body.stream === true, toolBudget };
+  // Keep HTML-like text out of the literal UI payload. JSON Unicode escapes
+  // preserve the exact values while avoiding entity interpretation upstream.
+  const serialized=JSON.stringify(payload).replace(/[&<>]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0'));
+  const prompt = `${promptTemplate.trim()}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${serialized}\nEND_BRIDGE_REQUEST_JSON\n${transportReminder}\n`;
+  const promptLimit=Math.min(maxPromptChars,120000);
+  if(prompt.length>promptLimit)throw new BridgeError('context_too_large', '会話とツール定義が入力上限を超えました。会話を圧縮するか、選択ツールを減らしてください。本文は切り捨てず、M365への送信前に停止しました。', 413,
+    {prompt_chars:prompt.length,max_prompt_chars:promptLimit});
+  return { body, payload, prompt, images, requestId, validators, finalValidator, model, stream:body.stream === true, toolBudget };
 }
 
 function normalizeInvalidWindowsPathStrings(text) {
@@ -177,6 +199,19 @@ function parseRawTool(text,req) {
     r.lastIndex=pos;
     return r.exec(text);
   };
+  const findJsonStringEnd=()=>{
+    let i=pos;while(i<text.length&&/\s/.test(text[i]))i++;
+    assert(text[i]==='"','invalid_envelope','json-string ARG は引用符で開始する必要があります。',502);
+    for(i++;i<text.length;i++){
+      if(text[i]==='\\'){i++;continue;}
+      if(text[i]!=='"')continue;
+      const end=i+1;
+      const marker=/^\s+END(?:_|\\_)ARG(?=\s|$)/i.exec(text.slice(end));
+      assert(marker,'invalid_envelope','json-string ARG 終端がありません。',502);
+      return {index:end,0:marker[0]};
+    }
+    throw new BridgeError('invalid_envelope','json-string ARG が途中で終了しています。',502);
+  };
 
   skipWs();
   const nm=/^NAME\s+([A-Za-z0-9_.:-]{1,128})(?=\s|$)/i.exec(text.slice(pos));
@@ -201,17 +236,21 @@ function parseRawTool(text,req) {
     const tail=/^END(?:_|\\_)BRIDGE(?:_|\\_)TOOL(?=\s*$)/i.exec(text.slice(pos));
     if(tail){pos+=tail[0].length;break;}
 
-    const hm=/^ARG\s+(\/\S+)\s+(string|number|integer|boolean|null|object|array|json)(?=\s|$)/i.exec(text.slice(pos));
+    const hm=/^ARG\s+(\/\S+)\s+(json-string|string|number|integer|boolean|null|object|array|json)(?=\s|$)/i.exec(text.slice(pos));
     assert(hm,'invalid_envelope','ARG ヘッダーが不正です。',502);
     pos+=hm[0].length;
 
-    const e=findEnd('arg');
+    const type=hm[2].toLowerCase();
+    const e=type==='json-string'?findJsonStringEnd():findEnd('arg');
     assert(e,'invalid_envelope','ARG 終端がありません。',502);
     let raw=text.slice(pos,e.index).replace(/^\s+/,'').replace(/\s+$/,'');
 
     let value;
-    const type=hm[2].toLowerCase();
-    if(type==='string')value=raw;
+    if(type==='json-string'){
+      value=strictJson(raw,{maxBytes:256*1024});
+      assert(typeof value==='string','invalid_envelope','json-string ARG はJSON文字列である必要があります。',502);
+    }
+    else if(type==='string')value=raw;
     else if(type==='null'){assert(raw===''||raw==='null','invalid_envelope','null ARG が不正です。',502);value=null;}
     else if(type==='boolean'){assert(/^(true|false)$/.test(raw),'invalid_envelope','boolean ARG が不正です。',502);value=raw==='true';}
     else if(type==='integer'){assert(/^-?(0|[1-9]\d*)$/.test(raw),'invalid_envelope','integer ARG が不正です。',502);value=Number(raw);assert(Number.isSafeInteger(value),'invalid_envelope','integer ARG が範囲外です。',502);}
@@ -237,14 +276,22 @@ function parseRawTool(text,req) {
 
 export function parseEnvelope(raw, req) {
   let text = raw.trim();
+  // Strip only a complete outer transport fence. The contents are still parsed
+  // strictly; do not extract an apparently valid substring from surrounding prose.
+  const transportFence=/^(`{3,})(?:text|json)?[ \t]*\r?\n([\s\S]*?)\r?\n\1[ \t]*$/i.exec(text);
+  if(transportFence)text=transportFence[2];
 
   const rawTool=parseRawTool(text,req);
   if(rawTool)return rawTool;
 
-  const finalHead=/^BRIDGE(?:_|\\_)FINAL\s+([a-f0-9-]{36})(?:(?:[ \t]*\n)|[ \t]+|$)/i.exec(text);
+  const finalHead=/^BRIDGE(?:_|\\_)FINAL((?:_|\\_)V2)?\s+([a-f0-9-]{36})(?:(?:[ \t]*\n)|[ \t]+|$)/i.exec(text);
   if(finalHead){
-    assert(finalHead[1]===req.requestId,'invalid_envelope','final の request_id が一致しません。',502);
-    const content=text.slice(finalHead[0].length);
+    assert(finalHead[2]===req.requestId,'invalid_envelope','final の request_id が一致しません。',502);
+    let content=text.slice(finalHead[0].length);
+    if(finalHead[1]){
+      assert(/\r?\nEND_BRIDGE_FINAL_V2[ \t]*$/i.test(content),'invalid_envelope','final の終端がありません。',502);
+      content=content.replace(/\r?\nEND_BRIDGE_FINAL_V2[ \t]*$/i,'');
+    }
     const choice=req.payload.tool_choice;
     assert(content.trim().length>0,'invalid_envelope','final の内容が空です。',502);
     assert(choice!=='required'&&!isObject(choice),'tool_choice_violation','この要求では final を返せません。',502);

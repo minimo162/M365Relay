@@ -14,7 +14,7 @@ if ($files.Count -lt 1) { throw 'Empty distribution manifest.' }
 $seen = @{}
 foreach ($entry in $files) {
     $relative = [string]$entry.path
-    if ($relative -cnotmatch '^[A-Za-z0-9_.\-/]+$' -or $relative.StartsWith('/') -or @($relative.Split('/') | Where-Object { $_ -eq '..' -or $_ -eq '.' -or $_ -eq '' }).Count -gt 0 -or $seen.ContainsKey($relative)) { throw 'Invalid or duplicate manifest path.' }
+    if ($relative -cnotmatch '^[A-Za-z0-9@_.\-/]+$' -or $relative.StartsWith('/') -or @($relative.Split('/') | Where-Object { $_ -eq '..' -or $_ -eq '.' -or $_ -eq '' }).Count -gt 0 -or $seen.ContainsKey($relative)) { throw 'Invalid or duplicate manifest path.' }
     $seen[$relative] = $true
     if ([string]$entry.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid manifest hash.' }
     $path = Join-Path $root $relative
@@ -23,7 +23,19 @@ foreach ($entry in $files) {
     if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Linked distribution files are not supported.' }
     if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $entry.sha256) { throw "Distribution hash mismatch: $relative" }
 }
-foreach ($required in @('runtime/node.exe','runtime/LICENSE','src/cli.mjs','config/node-runtime.lock.json','prompts/m365-tool-router.md','scripts/Launch.ps1','scripts/Verify-Distribution.ps1','Bridge.cmd')) {
+foreach ($required in @('runtime/node.exe','runtime/LICENSE','src/cli.mjs','src/desktop.mjs','src/run-log.mjs','src/model-selection.mjs','config/node-runtime.lock.json','prompts/m365-tool-router.md','scripts/Launch.ps1','scripts/Verify-Distribution.ps1','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd')) {
     if (-not $seen.ContainsKey($required)) { throw "Required manifest entry missing: $required" }
 }
 if ((Get-FileHash -LiteralPath (Join-Path $root 'runtime\node.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lock.executableSha256) { throw 'Bundled Node.js does not match the official pinned executable.' }
+
+if (-not $seen.ContainsKey('config/officecli-runtime.lock.json')) { throw 'OfficeCLI runtime contract missing.' }
+foreach($requiredPdf in @('src/pdf-cli.mjs','runtime/liteparse/package-lock.json','runtime/liteparse/node_modules/@llamaindex/liteparse/dist/lib.js','runtime/liteparse/node_modules/@llamaindex/liteparse-win32-x64-msvc/pdfium.dll','runtime/liteparse/node_modules/@llamaindex/liteparse-win32-x64-msvc/liteparse.win32-x64-msvc.node')) {
+    if (-not $seen.ContainsKey($requiredPdf)) { throw "PDF runtime manifest entry missing: $requiredPdf" }
+}
+$officeLock=Get-Content -LiteralPath (Join-Path $root 'config\officecli-runtime.lock.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+foreach($file in $officeLock.files) {
+    if ($file.name -cnotmatch '^[A-Za-z0-9.-]+$' -or $file.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid OfficeCLI runtime contract.' }
+    $relative='runtime/officecli/'+$file.name
+    if (-not $seen.ContainsKey($relative)) { throw "OfficeCLI manifest entry missing: $relative" }
+    if ((Get-FileHash -LiteralPath (Join-Path $root $relative) -Algorithm SHA256).Hash.ToLowerInvariant() -cne $file.sha256) { throw 'OfficeCLI does not match the pinned runtime.' }
+}

@@ -10,8 +10,8 @@
         "name": "M365 Copilot (M365Relay)",
         "url": "http://127.0.0.1:8731/v1/chat/completions",
         "toolCalling": true,
-        "vision": false,
-        "maxInputTokens": 24000,
+        "vision": true,
+        "maxInputTokens": 28000,
         "maxOutputTokens": 8000
       }
     ]

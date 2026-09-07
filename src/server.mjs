@@ -32,7 +32,8 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{}}) 
       if(req.method==='GET' && req.url==='/v1/models')return json(res,200,{object:'list',data:[{id:MODEL,object:'model',created:0,owned_by:'local-m365-ui-bridge'}]});
       assert(req.method==='POST' && req.url==='/v1/chat/completions','not_found','このエンドポイントは対応していません。',404);
       assert((req.headers['content-type']??'').toLowerCase().split(';')[0].trim()==='application/json','content_type','Content-Type: application/json が必要です。',415);
-      const body=strictJson(await bodyText(req,2*1024*1024));
+      const maxBodyBytes=(config.allowImages?20:2)*1024*1024;
+      const body=strictJson(await bodyText(req,maxBodyBytes),{maxBytes:maxBodyBytes});
       parsed=prepareRequest(body,template,config);
       release=await queue.acquire(signal);abortReason(signal);
       fingerprint=await ledger.reserve(parsed);
@@ -57,7 +58,7 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{}}) 
       if(fingerprint&&!settled) {
         try{await ledger.set(fingerprint,possiblySent?'unknown_or_invalid':'not_sent');}catch{}
       }
-      log({request_id:parsed?.requestId??null,event:'error',code:safe.code});
+      log({request_id:parsed?.requestId??null,event:'error',code:safe.code,details:safe.details});
       if(!res.destroyed&&!res.writableEnded) {
         if(res.headersSent) {res.write(`data: ${JSON.stringify({error:safe})}\n\n`);res.end('data: [DONE]\n\n');}
         else json(res,error instanceof BridgeError?error.status:signal.aborted?504:500,{error:safe});

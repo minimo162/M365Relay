@@ -96,3 +96,71 @@ test('third terminal call is allowed and an explicit new user turn resets the bu
  assert.equal(fresh.toolBudget.totalUsed,0);assert.equal(fresh.toolBudget.terminalUsed,0);
  assert.equal(parseEnvelope(rawTool(fresh),fresh).action,'tool_calls');
 });
+
+test('fenced json-string arguments preserve exact whitespace, Windows paths and marker text',()=>{
+ const r=request();
+ const command='  \tC:\\Work\\.local\\a_b.txt\nimport x;\nimport y;\n END_ARG \n"quoted" literal \\n\n  ';
+ const body=rawTool(r,{command:JSON.stringify(command)}).replace('ARG /command string','ARG /command json-string');
+ for(const raw of [body,'```text\n'+body+'\n```']){
+  const value=JSON.parse(completion(parseEnvelope(raw,r),r).choices[0].message.tool_calls[0].function.arguments).command;
+  assert.equal(value,command);
+ }
+});
+
+test('json-string supports empty strings and rejects malformed or non-string values',()=>{
+ const r=request();
+ const wrap=s=>rawTool(r,{command:s}).replace('ARG /command string','ARG /command json-string');
+ assert.equal(parseEnvelope(wrap('""'),r).tool_calls[0].arguments.command,'');
+ for(const s of ['null','{}','"bad\\q"','"unterminated','"first" "second"','"literal\nnewline"'])assert.throws(()=>parseEnvelope(wrap(s),r));
+});
+
+test('code arrows and literal HTML entities remain distinct through JSON transport',()=>{
+ const r=request();
+ for(const source of ['rows.filter(row => row.active)', 'const literal = "&gt; &lt; &amp;";']){
+  const raw=rawTool(r,{command:JSON.stringify(source)}).replace('ARG /command string','ARG /command json-string');
+  const value=JSON.parse(completion(parseEnvelope(raw,r),r).choices[0].message.tool_calls[0].function.arguments).command;
+  assert.equal(value,source);
+ }
+ const escaped=rawTool(r,{command:'"rows.filter(row =\\u003e row.active)"'}).replace('ARG /command string','ARG /command json-string');
+ assert.equal(parseEnvelope(escaped,r).tool_calls[0].arguments.command,'rows.filter(row => row.active)');
+});
+
+test('outer fences do not permit surrounding prose or bypass ID and tool choice checks',()=>{
+ const r=request(), other=request();
+ const wrapped='```text\n'+rawTool(r)+'\n```';
+ assert.throws(()=>parseEnvelope('explanation\n'+wrapped,r));
+ assert.throws(()=>parseEnvelope(wrapped+'\nafterword',r));
+ assert.throws(()=>parseEnvelope(wrapped,other),{code:'invalid_envelope'});
+ const none=request({tool_choice:'none'});
+ assert.throws(()=>parseEnvelope('```text\n'+rawTool(none)+'\n```',none),{code:'tool_choice_violation'});
+ const final=request({tools:[]});
+ const content='A\n```js\nx()\n```\nC:\\Work\\.local';
+ assert.equal(parseEnvelope('````text\nBRIDGE_FINAL '+final.requestId+'\n'+content+'\n````',final).content,content);
+});
+
+test('serialized prompt is bounded at 120000 characters even with legacy larger settings',()=>{
+ const body={model:MODEL,messages:[{role:'user',content:''}]};
+ const overhead=prepareRequest(body,'test template').prompt.length;
+ body.messages[0].content='a'.repeat(120000-overhead);
+ assert.equal(prepareRequest(body,'test template',{maxPromptChars:180000}).prompt.length,120000);
+ body.messages[0].content+='a';
+ assert.throws(()=>prepareRequest(body,'test template',{maxPromptChars:180000}),e=>e.code==='context_too_large'&&e.details.prompt_chars===120001&&e.details.max_prompt_chars===120000);
+});
+
+test('UI request JSON escapes HTML-sensitive characters without changing payload values',()=>{
+ const content='row => row.active; literal &gt; &lt; &amp; <summary>日本語😀</summary> \\u003e';
+ const r=prepareRequest({model:MODEL,messages:[{role:'user',content}]},'test template');
+ const wire=r.prompt.split('BRIDGE_REQUEST_JSON:\n')[1].split('\nEND_BRIDGE_REQUEST_JSON\n')[0];
+ assert(!/[&<>]/.test(wire));
+ assert.deepEqual(JSON.parse(wire),r.payload);
+ assert.equal(JSON.parse(wire).messages[0].content,content);
+ const tooBig={model:MODEL,messages:[{role:'user',content:'&'.repeat(21000)}]};
+ assert.throws(()=>prepareRequest(tooBig,'test template'),e=>e.code==='context_too_large'&&e.details.prompt_chars>120000);
+});
+
+test('final v2 requires an end marker without reinterpreting legacy final text',()=>{
+ const r=request({tools:[]});
+ assert.equal(parseEnvelope(`BRIDGE_FINAL_V2 ${r.requestId}\nanswer\nEND_BRIDGE_FINAL_V2`,r).content,'answer');
+ assert.throws(()=>parseEnvelope(`BRIDGE_FINAL_V2 ${r.requestId}\nanswer`,r),{code:'invalid_envelope'});
+ assert.equal(parseEnvelope(`BRIDGE_FINAL ${r.requestId}\nanswer\nEND_BRIDGE_FINAL_V2`,r).content,'answer\nEND_BRIDGE_FINAL_V2');
+});

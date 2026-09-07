@@ -73,6 +73,27 @@ export function browserOperation(origin,selectors,operation,args={}) {
       const nodes=docs.flatMap(d=>Array.from(d.querySelectorAll(selector)));
       for(let i=nodes.length-1;i>=0;i--){
         const t=read(nodes[i]).trim();if(!t)continue;
+        // M365's Scriptor renderer is not <pre><code>: line numbers are siblings
+        // of indexed code lines. Read only those lines, in contiguous DOM order.
+        // A virtualized prefix is not a complete answer. Require a transport end
+        // marker, and never fall back to the rendered text with gutter labels.
+        const indexed=[...nodes[i].querySelectorAll('[data-virtualized-code-find-root] [role="textbox"][aria-readonly="true"]')];
+        if(indexed.length){
+          const candidates=[];
+          for(const box of indexed){
+            const lines=[...box.querySelectorAll('[data-line-index]')];
+            if(!lines.length||lines.some((line,index)=>line.getAttribute('data-line-index')!==String(index)))continue;
+            const body=lines.map(line=>line.textContent??'').join('\n');
+            const head=/^BRIDGE_(TOOL|FINAL_V2)\s+[a-f0-9-]{36}(?:\s|$)/i.exec(body);
+            if(!head)continue;
+            // Scriptor may append blank indexed rows (NBSP placeholders). They
+            // are outside the terminal marker, not part of an argument value.
+            const last=lines.findLast(line=>(line.textContent??'').trim());
+            if((last?.textContent??'').trim().toUpperCase()!==`END_BRIDGE_${head[1].toUpperCase()}`)continue;
+            candidates.push(body);
+          }
+          return {candidates:[...new Set(candidates)],nonempty:true};
+        }
         const code=[...nodes[i].querySelectorAll('pre code,pre')].map(e=>(e.textContent||'').trim()).filter(Boolean);
         return {candidates:[...new Set([...code,t])],nonempty:true};
       }
@@ -80,6 +101,16 @@ export function browserOperation(origin,selectors,operation,args={}) {
     return {candidates:[],nonempty:false};
   }
   const normalize=t=>t.replace(/\r\n?/g,'\n');
+  if(operation==='editorReady'){
+    const key='__m365RelayEditorReadiness';
+    const empty=!!editor&&enabled(editor)&&!editorText(editor).text&&!control('stop')&&!replies().nonempty;
+    if(!empty){delete document[key];return {ready:false};}
+    let previous=document[key];
+    if(!previous||previous.editor!==editor||previous.requestId!==args.requestId){
+      previous={editor,requestId:args.requestId,since:Date.now()};document[key]=previous;
+    }
+    return {ready:Date.now()-previous.since>=args.stableMs};
+  }
   if(operation==='snapshot')return {origin:location.origin,editor:!!editor,input:editorText(editor).text,busy:!!control('stop'),...replies()};
   if(operation==='verifyInput')return inputCheck(args.expected);
   if(operation==='sendReady'){
@@ -90,6 +121,10 @@ export function browserOperation(origin,selectors,operation,args={}) {
     return {ready:checked.matched&&!busy&&enabled(button),editor:true,busy,button:!!button,enabled:enabled(button),input:checked};
   }
   if(operation==='focus'){
+    if(args.requestId){
+      const readiness=document.__m365RelayEditorReadiness;
+      if(!readiness||readiness.editor!==editor||readiness.requestId!==args.requestId||Date.now()-readiness.since<args.stableMs)return {focused:false};
+    }
     if(!editor||!enabled(editor))throw new Error('editor_missing');editor.focus();
     if(editor.isContentEditable){const r=editor.ownerDocument.createRange();r.selectNodeContents(editor);r.collapse(false);const s=editor.ownerDocument.getSelection();s.removeAllRanges();s.addRange(r);}
     else if(editor.setSelectionRange)editor.setSelectionRange(editor.value.length,editor.value.length);

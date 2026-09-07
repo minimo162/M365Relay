@@ -10,6 +10,9 @@ $gitExecutable = (Get-Command git -ErrorAction Stop).Source
 try {
     $null = New-Item -ItemType Directory -Path $temp
     $app = Join-Path $temp 'App with spaces'
+    $archiveCheck=[IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $ZipPath).Path)
+    try { if (@($archiveCheck.Entries | Where-Object { $_.FullName.Contains('\') }).Count) { throw 'Distribution ZIP contains non-portable backslash paths.' } }
+    finally { $archiveCheck.Dispose() }
     [IO.Compression.ZipFile]::ExtractToDirectory((Resolve-Path -LiteralPath $ZipPath).Path, $app)
     $env:PATH = "$env:SystemRoot\system32;$env:SystemRoot"
     $env:M365_RELAY_HOME = Join-Path $temp 'User state'
@@ -37,8 +40,14 @@ try {
     foreach ($doc in @('schema-compatibility.md','input-compatibility.md','release-notes.md','test-results.md','sources.md')) {
         if (-not (Test-Path -LiteralPath (Join-Path $app "docs\$doc"))) { throw "Distribution document missing: $doc" }
     }; $checks++
+    # Exercise native document runtimes with the actual bundled Node, no PATH Node.
+    $env:NODE_OPTIONS=$null
+    & (Join-Path $app 'runtime\node.exe') (Join-Path $PSScriptRoot 'verify-document-runtime.mjs') $app $temp
+    if ($LASTEXITCODE -ne 0) { throw 'Bundled document runtime verification failed.' }; $checks++
+    $env:NODE_OPTIONS='--definitely-invalid-inherited-option'
     # Deliberately remove the runtime. A global fallback must never succeed.
     $node = Join-Path $app 'runtime\node.exe'
+    if (-not ([IO.Path]::GetFullPath($node)).StartsWith(([IO.Path]::GetFullPath($temp) + [IO.Path]::DirectorySeparatorChar), [StringComparison]::OrdinalIgnoreCase)) { throw 'Runtime fixture is outside the test directory.' }
     Move-Item -LiteralPath $node -Destination "$node.saved"
     & $bridge help
     if ($LASTEXITCODE -eq 0) { throw 'Missing bundled runtime was accepted.' }; $checks++
@@ -53,13 +62,9 @@ try {
     # fixture with a nonempty invalid runtime instead of editing that running image.
     # All other files and the original manifest remain byte-identical.
     $badApp = Join-Path $temp 'Corrupt runtime fixture'
-    $null = New-Item -ItemType Directory -Path $badApp
-    Get-ChildItem -LiteralPath $app | Where-Object { $_.Name -ne 'runtime' } | ForEach-Object {
-        Copy-Item -LiteralPath $_.FullName -Destination $badApp -Recurse
-    }
+    [IO.Compression.ZipFile]::ExtractToDirectory($ZipPath, $badApp)
+    & (Join-Path $badApp 'scripts\Verify-Distribution.ps1') -DistributionPath $badApp
     $badRuntime = Join-Path $badApp 'runtime'
-    $null = New-Item -ItemType Directory -Path $badRuntime
-    Copy-Item -LiteralPath (Join-Path $app 'runtime\LICENSE') -Destination $badRuntime
     [IO.File]::WriteAllBytes((Join-Path $badRuntime 'node.exe'), [byte[]]@(0x4d,0x5a,0x00))
     & (Join-Path $badApp 'Bridge.cmd') help
     if ($LASTEXITCODE -eq 0) { throw 'Corrupt runtime was accepted.' }; $checks++
@@ -67,5 +72,9 @@ try {
     exit 0
 } finally {
     $env:PATH=$oldPath; $env:M365_RELAY_HOME=$oldHome; $env:NODE_OPTIONS=$oldOptions
-    if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
+    if (Test-Path -LiteralPath $temp) {
+        $resolvedTemp = [IO.Path]::GetFullPath($temp)
+        if ([IO.Path]::GetDirectoryName($resolvedTemp) -ne ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())).TrimEnd([IO.Path]::DirectorySeparatorChar) -or [IO.Path]::GetFileName($resolvedTemp) -cnotmatch '^M365Relay test [0-9a-f]{32}$') { throw 'Refusing cleanup outside the temporary test directory.' }
+        Remove-Item -LiteralPath $resolvedTemp -Recurse -Force
+    }
 }

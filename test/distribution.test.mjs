@@ -12,6 +12,7 @@ test('runtime lock pins the official archive and extracted executable',async()=>
 test('launcher uses verified bundled runtime without PATH fallback or download',async()=>{
   const cmd=await read('Bridge.cmd'),ps=await read('scripts/Launch.ps1');
   assert.match(cmd,/SystemRoot/); assert.match(cmd,/NODE_OPTIONS=/); assert.match(cmd,/NODE_PATH=/);
+  assert.match(cmd,/PSModulePath=%SystemRoot%\\System32\\WindowsPowerShell\\v1\.0\\Modules/);
   assert.doesNotMatch(cmd,/where node|^node\.exe/im);
   assert.match(ps,/Verify-Distribution/); assert.match(ps,/runtime\\node\.exe/);
   assert.doesNotMatch(cmd+ps,/Invoke-WebRequest|https:\/\/|Package-Release/);
@@ -27,6 +28,8 @@ test('distribution includes full license and does not copy user state',async()=>
   assert.match(s,/@\('node.exe','LICENSE'\)/);
   assert.match(s,/\*\.example\.json/);
   assert.doesNotMatch(s,/Copy-Item[^\n]*(?:token\.txt|settings\.json|requests\.json|edge-profile)/);
+  assert.match(s,/'Run\.cmd'/);
+  assert.match(await read('Setup.cmd'),/Bridge\.cmd" setup/);
 });
 test('integrity verifier requires manifest and pinned node hash',async()=>{
   const s=await read('scripts/Verify-Distribution.ps1');

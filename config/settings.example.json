@@ -2,7 +2,7 @@
   "port": 8731,
   "cdpPort": 9336,
   "copilotUrl": "https://m365.cloud.microsoft/chat/",
-  "maxPromptChars": 180000,
+  "maxPromptChars": 120000,
   "requestTimeoutMs": 300000,
   "readyTimeoutMs": 45000,
   "pollIntervalMs": 1500,
