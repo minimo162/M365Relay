@@ -75,4 +75,10 @@ async function main(){
     if(runLog.path)console.log('診断ログ: '+runLog.path);
   }catch(error){if(server?.listening)await server.stop();await runLog?.flush();await unlock();throw error;}
 }
-main().catch(error=>{console.error(JSON.stringify({error:publicError(error)}));process.exitCode=1;});
+main().catch(error=>{
+  const safe=publicError(error);
+  console.error(process.env.M365_RELAY_JSON_LOGS==='1'
+    ?JSON.stringify({error:safe})
+    :`M365Relayを開始・操作できませんでした。\n${safe.message}\n問い合わせ用コード: ${safe.code}`);
+  process.exitCode=1;
+});

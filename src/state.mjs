@@ -89,7 +89,7 @@ export async function recoverProcessLock(home) {
   const owner=await readLockOwner(path);
   if(lockPredatesBoot(owner)) { await rm(path,{recursive:true,force:true}); return; }
   let running=true; try{process.kill(owner.pid,0);}catch(e){if(e.code==='ESRCH')running=false;}
-  assert(!running,'process_alive','同じPIDのプロセスが存在するためロックを削除しません。',409);
+  assert(!running,'process_alive','動作中のプロセスがあるため復旧しません。M365Relayの起動ウィンドウが開いている場合は、そのまま使用してください。停止する場合は起動ウィンドウでCtrl+Cを押してから、もう一度復旧してください。',409);
   await rm(path,{recursive:true,force:true});
 }
 export { lockPredatesBoot };
