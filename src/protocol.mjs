@@ -21,6 +21,8 @@ function textContent(c) {
 }
 
 function toolRoundInfo(messages) {
+  // This is a retained-history guard, not a durable conversation-wide budget.
+  // Client compaction can remove calls; summary prose is not execution evidence.
   let start=0;
   for(let i=messages.length-1;i>=0;i--){
     if(messages[i]?.role==='user'){start=i+1;break;}
