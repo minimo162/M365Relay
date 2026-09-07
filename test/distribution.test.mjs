@@ -27,6 +27,8 @@ test('distribution includes full license and does not copy user state',async()=>
   assert.match(s,/@\('node.exe','LICENSE'\)/);
   assert.match(s,/\*\.example\.json/);
   assert.doesNotMatch(s,/Copy-Item[^\n]*(?:token\.txt|settings\.json|requests\.json|edge-profile)/);
+  assert.match(s,/'Run\.cmd'/);
+  assert.match(await read('Setup.cmd'),/Bridge\.cmd" setup/);
 });
 test('integrity verifier requires manifest and pinned node hash',async()=>{
   const s=await read('scripts/Verify-Distribution.ps1');

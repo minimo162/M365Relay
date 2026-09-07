@@ -44,7 +44,7 @@ try {
     $actualVersion = & (Join-Path $runtime 'node.exe') --version
     if ($LASTEXITCODE -ne 0 -or $actualVersion -cne "v$($lock.version)") { throw 'Bundled runtime version check failed.' }
     # Curated distribution: never copy local settings, tokens, profiles, logs or npm.
-    foreach ($relative in @('src','prompts','config','README.md','THIRD_PARTY.md','Bridge.cmd','Setup.cmd','Open-Copilot.cmd','Start-Bridge.cmd','package.json')) {
+    foreach ($relative in @('src','prompts','config','README.md','THIRD_PARTY.md','Bridge.cmd','Run.cmd','Setup.cmd','Open-Copilot.cmd','Start-Bridge.cmd','package.json')) {
         if ($relative -in @('src','prompts','config')) {
             $null = New-Item -ItemType Directory -Force -Path (Join-Path $stage $relative)
             $pattern = if ($relative -eq 'src') { '*.mjs' } elseif ($relative -eq 'prompts') { '*.md' } else { '*.example.json' }
@@ -69,4 +69,10 @@ try {
     $digest = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
     [IO.File]::WriteAllText("$zipPath.sha256", "$digest  $zipName`n", (New-Object Text.UTF8Encoding($false)))
     Write-Output $zipPath
-} finally { if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force } }
+} finally {
+    if (Test-Path -LiteralPath $work) {
+        $resolvedWork = [IO.Path]::GetFullPath($work)
+        if ([IO.Path]::GetDirectoryName($resolvedWork) -ne [IO.Path]::GetFullPath($OutputDirectory) -or [IO.Path]::GetFileName($resolvedWork) -cnotmatch '^\.build-[0-9a-f]{32}$') { throw 'Refusing cleanup outside the build directory.' }
+        Remove-Item -LiteralPath $resolvedWork -Recurse -Force
+    }
+}

@@ -8,6 +8,7 @@ import { createBridgeServer } from './server.mjs';
 import { M365Backend, diagnoseBrowser } from './m365.mjs';
 import { connectOwnedBrowser } from './cdp.mjs';
 import { BridgeError, publicError, assert } from './errors.mjs';
+import { findVSCode,prepareDesktop,launchDesktop } from './desktop.mjs';
 async function openEdge(config){
   assert(process.platform==='win32','windows_required','専用Edgeの自動起動はWindows用です。');
   // Never silently reuse an unrelated debugging port/profile.
@@ -34,15 +35,24 @@ async function main(){
   const major=Number(process.versions.node.split('.')[0]),minor=Number(process.versions.node.split('.')[1]);
   assert(major>22 || major===22&&minor>=16,'node_version','Node.js 22.16以上が必要です。');
   const command=process.argv[2]??'help';
-  if(command==='help'){console.log('Commands: init | open | diagnose | serve | recover-lock\nConfig/data: '+homePath());return;}
+  if(command==='help'){console.log('Commands: run [workspace] | setup | init | open | diagnose | serve | recover-lock\nConfig/data: '+homePath());return;}
   if(command==='recover-lock'){await recoverProcessLock(homePath());console.log('停止済みプロセスの起動ロックを削除しました。要求台帳は保持しています。');return;}
   const config=await loadConfig();
+  let desktop;
+  if(command==='setup'||command==='run'){
+    assert(process.platform==='win32','windows_required','Run.cmdはWindows用です。');
+    const executable=await findVSCode();
+    desktop=await prepareDesktop(config,{executable,workspace:process.argv[3]});
+    if(command==='setup'){
+      console.log('初回設定が完了しました。接続キーやJSONを手で編集する必要はありません。\nRun.cmdを開くと、M365とVS Codeが起動します。\n作業フォルダー: '+desktop.workspace);return;
+    }
+  }
   if(command==='init'){
     const p=await writeVscodeExample(config);console.log(`設定を作成しました: ${config.home}\nVS Code設定例: ${p}\n接続キー: ${join(config.home,'token.txt')}\n接続キーの内容はログに表示しません。`);return;
   }
   if(command==='open'){await openEdge(config);return;}
   if(command==='diagnose'){console.log(JSON.stringify(await diagnoseBrowser(config),null,2));return;}
-  if(command!=='serve')throw new BridgeError('unknown_command','help で利用可能なコマンドを確認してください。');
+  if(command!=='serve'&&command!=='run')throw new BridgeError('unknown_command','help で利用可能なコマンドを確認してください。');
   const unlock=await acquireProcessLock(config.home);
   let server;
   try{
@@ -53,6 +63,11 @@ async function main(){
     const shutdown=async()=>{await server.stop();await unlock();process.exit(0);};
     process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(config.port,'127.0.0.1',resolve);});
+    if(desktop){
+      await openEdge(config);
+      await launchDesktop(desktop);
+      console.log('接続の準備ができました。専用Edgeのサインインを確認し、VS Codeのチャットで依頼を入力してください。\nこのウィンドウを閉じると接続が終了します。');
+    }
     const {version}=JSON.parse(await readFile(join(ROOT,'package.json'),'utf8'));
     console.log(`M365Relay ${version} (実M365で基本往復確認済み・ツール通し動作は検証中)\nEndpoint: http://127.0.0.1:${config.port}/v1/chat/completions\n終了: Ctrl+C`);
   }catch(error){if(server?.listening)await server.stop();await unlock();throw error;}

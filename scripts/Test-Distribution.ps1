@@ -39,6 +39,7 @@ try {
     }; $checks++
     # Deliberately remove the runtime. A global fallback must never succeed.
     $node = Join-Path $app 'runtime\node.exe'
+    if (-not ([IO.Path]::GetFullPath($node)).StartsWith(([IO.Path]::GetFullPath($temp) + [IO.Path]::DirectorySeparatorChar), [StringComparison]::OrdinalIgnoreCase)) { throw 'Runtime fixture is outside the test directory.' }
     Move-Item -LiteralPath $node -Destination "$node.saved"
     & $bridge help
     if ($LASTEXITCODE -eq 0) { throw 'Missing bundled runtime was accepted.' }; $checks++
@@ -67,5 +68,9 @@ try {
     exit 0
 } finally {
     $env:PATH=$oldPath; $env:M365_RELAY_HOME=$oldHome; $env:NODE_OPTIONS=$oldOptions
-    if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
+    if (Test-Path -LiteralPath $temp) {
+        $resolvedTemp = [IO.Path]::GetFullPath($temp)
+        if ([IO.Path]::GetDirectoryName($resolvedTemp) -ne ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())).TrimEnd([IO.Path]::DirectorySeparatorChar) -or [IO.Path]::GetFileName($resolvedTemp) -cnotmatch '^M365Relay test [0-9a-f]{32}$') { throw 'Refusing cleanup outside the temporary test directory.' }
+        Remove-Item -LiteralPath $resolvedTemp -Recurse -Force
+    }
 }

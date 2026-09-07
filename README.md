@@ -2,7 +2,7 @@
 
 M365 Copilotの判断を、VS Codeの実行につなぐローカル接続アダプターです。
 
-**0.2.15 / 実VS Code＋実M365で通常会話の往復とVS Code標準ツールの呼び出し実行まで確認済みです。複数ツールラウンドの安定完走は継続検証中です。**
+**0.2.16候補版 / Run.cmdによる接続設定・起動を追加しました。文字搬送の修正後、実VS Code＋実M365の複数ファイル課題は補助ありで成功しています。無介入の安定完走と高速化は継続中です。**
 
 この版は0.2.2以降の実M365検証で見つかった入力欄DOM差分、長文入力、送信待機、応答形式、起動ロック、ツールループを累積修正しています。
 既存の接続キーと設定を保持して利用します。[更新手順と検証範囲](docs/release-notes.md)を参照してください。
@@ -34,21 +34,25 @@ GitHubアカウントやCopilot契約をアダプターの接続キーとして�
 ## 配布物の入手
 
 リポジトリの **Actions → CI and Windows distribution → 成功したmainの実行 → Artifacts → M365Relay-windows-x64** から取得します。
-ダウンロードしたArtifactsのZIPの中に、配布用`M365Relay-0.2.15-win-x64-<commit>.zip`と`.sha256`があります。
+ダウンロードしたArtifactsのZIPの中に、配布用`M365Relay-0.2.16-win-x64-<commit>.zip`と`.sha256`があります。
 GitHubのCode → Download ZIP / Source code (zip)はNode.jsを含まないため、利用者向け配布には使いません。
 
 ## 初回起動
 
-1. `Setup.cmd`を実行して設定と接続キーを作成します。
-2. `Open-Copilot.cmd`で専用Edgeを開き、M365へ手動サインインします。
-3. `Start-Bridge.cmd`を起動します。終了はそのウィンドウでCtrl+Cです。
+1. `Run.cmd`を開きます。設定・接続キー・専用VS Code設定を自動で作成し、EdgeとVS Codeを起動します。
+2. 専用EdgeでM365へ手動サインインします。VS Codeの初回案内では「Continue without Signing In」を選べます。GitHubへのサインインは不要です。
+3. VS CodeのチャットでM365Relayを選び、依頼を入力します。フォルダーの信頼や操作の承認は画面で確認します。
+
+接続キーのコピーやJSON編集は不要です。通常のVS Code設定は変更せず、M365Relay専用のユーザーデータを使います。
+既存フォルダーで始めるには、そのフォルダーをRun.cmdへドラッグするか、VS Codeで「フォルダーを開く」を選びます。
+終了はM365Relayの起動ウィンドウでCtrl+Cです。`Setup.cmd`は設定のみ、`Start-Bridge.cmd`は接続サーバーのみの起動です。
 
 生成先は`%LOCALAPPDATA%\M365Relay`です。`M365_RELAY_HOME`で変更でき、旧`M365_BRIDGE_HOME`も互換用に受け付けます。
 Setupを繰り返しても既存設定・`token.txt`・専用Edgeプロファイルは上書きしません。
 
 PC再起動より前の`bridge.lock`が残っている場合は、OS起動時刻とロック作成時刻を比較して自動回収します。同一起動中の本物の二重起動は引き続き拒否します。
 
-## VS Code接続
+## VS Codeへの手動接続（既存プロファイルを使う場合）
 
 `Chat: Manage Language Models` → `Add Models` → `Custom Endpoint`で追加します。
 API種類は **Chat Completions**、キーは利用者ローカルの`token.txt`です。
