@@ -86,7 +86,14 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
     'chat.viewSessions.enabled':true,'chat.viewSessions.orientation':'sideBySide',
     'security.workspace.trust.enabled':false};
  });
- return {executable,userDataDir,workspace:actualFolder};
+ // Pin the actual profile directory as well as the workspace. Packaged Windows
+ // launchers may redirect AppData; a VS Code self-restart can otherwise resolve
+ // the nominal --user-data-dir against a different filesystem view.
+ let actualUserDataDir;
+ try{actualUserDataDir=await realpath(userDataDir);}catch{
+  throw new BridgeError('profile_resolution_failed','専用VS Code設定の実際の保存先を確認できません。起動せず停止しました。',400);
+ }
+ return {executable,userDataDir:actualUserDataDir,workspace:actualFolder};
 }
 
 export async function launchDesktop(plan,{spawnProcess=spawn}={}){

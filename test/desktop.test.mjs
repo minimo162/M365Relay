@@ -10,7 +10,7 @@ async function fixture(t){const home=await mkdtemp(join(tmpdir(),'relay-desktop-
 test('first-run setup creates an isolated usable model without modifying a normal profile',async t=>{
  const c=await fixture(t);const normal=join(c.home,'normal-profile.json');await writeFile(normal,'USER SETTINGS');
  const plan=await prepareDesktop(c,{executable:'Code.exe'});
- assert.equal(plan.userDataDir,join(c.home,'vscode-data'));
+ assert.equal(plan.userDataDir,await realpath(join(c.home,'vscode-data')));
  const groups=JSON.parse(await readFile(join(plan.userDataDir,'User','chatLanguageModels.json'),'utf8'));
  const m=groups[0].models[0];assert.equal(m.requestHeaders.Authorization,'Bearer '+c.token);
  assert.equal(m.maxInputTokens,28000);assert.equal(m.maxOutputTokens,8000);
@@ -91,4 +91,20 @@ test('desktop resolves workspace links without adding execution approvals or pat
 test('unresolvable workspace fails rather than opening a guessed location',async t=>{
  const c=await fixture(t);
  await assert.rejects(prepareDesktop(c,{resolveRealPath:async()=>{throw new Error('denied');}}),{code:'workspace_resolution_failed'});
+});
+
+test('profile launch path is physical so restarts keep the same history directory',async t=>{
+ const c=await fixture(t),actual=join(c.home,'actual-profile'),alias=join(c.home,'vscode-data');
+ await mkdir(join(actual,'User'),{recursive:true});
+ await writeFile(join(actual,'User','history-sentinel'),'keep-existing-history');
+ await symlink(actual,alias,process.platform==='win32'?'junction':'dir');
+ const plan=await prepareDesktop(c,{executable:'Code.exe'});
+ assert.equal(plan.userDataDir,await realpath(actual));
+ assert.equal(await readFile(join(actual,'User','history-sentinel'),'utf8'),'keep-existing-history');
+ let captured;
+ await launchDesktop(plan,{spawnProcess:(exe,args)=>{
+  captured=args;const child=new EventEmitter();child.unref=()=>{};
+  queueMicrotask(()=>child.emit('spawn'));return child;
+ }});
+ assert.equal(captured[captured.indexOf('--user-data-dir')+1],await realpath(actual));
 });
