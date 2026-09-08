@@ -46,3 +46,11 @@ PDFのtextItemsは文字単位の座標で、表構造を推測しない。派�
 埋め込みPythonでPDF文字/座標/描画、Excel作成・文字列保持・インストール済みExcelによるSUM再計算、Word/PowerPoint作成・読戻し・PDF出力を実行。3形式の描画PNGを目視確認した。初期のWord HWND取得失敗を修正し、残った試験用プロセスを終了した。これは文書コマンドの局所試験で、Python版の実M365エージェントによる全工程はまだ未検証。
 
 参照: [Python埋め込み版](https://docs.python.org/3.13/using/windows.html#windows-embeddable)、[Python 3.13.15配布とハッシュ](https://www.python.org/downloads/release/python-31315/)、[pypdfium2 API](https://pypdfium2.readthedocs.io/en/stable/python_api.html)、[openpyxlの数式制約](https://openpyxl.readthedocs.io/en/stable/simple_formulae.html)。
+
+## 配布と実VS Codeの追加結果
+
+0674308候補ZIPは48,847,195 bytes。旧0.2.22の57,357,655 bytesから約15%縮小し、OfficeCLI/LiteParseのruntime項目は0。165単体テストとWindows配布10検査が成功し、CIも全ジョブ成功。Pythonを欠いた配布が外部Pythonへフォールバックしないことも検査した。
+
+同梱Node/Pythonを使う独立した専用VS Codeプロファイルから、実M365に固定1ページPDF→Excel課題を依頼。5要求・Relayエラー0・約114.5秒で、PDF読取、Excel作成、Office再計算、読戻し、PDF/PNG生成まで進んだ。独立した読戻しで品目・数値・SUM式・注記が一致し、原本を含む既存2ファイルはハッシュ不変。ただしモデルはview_imageを呼ぶ前に最終回答したため、無介入完走とはしない。追加の画像閲覧依頼は画面操作の競合で送信を確認できず、未実施として残す。
+
+利用対象の社内PCにデスクトップ版Officeがあるかは利用者へ確認中。ローカル端末には3アプリが存在して実処理できたが、社内端末にも同じ前提が成立するとは推定しない。正式公開はまだ行っていない。
