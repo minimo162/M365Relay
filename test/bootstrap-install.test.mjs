@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {installBootstrap,vscodeCliPath} from '../src/bootstrap.mjs';
@@ -18,9 +18,9 @@ async function fixture(t){
 }
 
 test('installer uses the scoped CLI without a shell and skips an intact installed copy',async t=>{
- const f=await fixture(t);assert.equal(await vscodeCliPath(f.plan.executable),f.cli);let calls=0;
+ const f=await fixture(t),expectedCli=await realpath(f.cli);assert.equal(await vscodeCliPath(f.plan.executable),expectedCli);let calls=0;
  const run=async(exe,args,options)=>{
-  calls++;assert.equal(exe,f.plan.executable);assert.equal(args[0],f.cli);
+  calls++;assert.equal(exe,f.plan.executable);assert.equal(args[0],expectedCli);
   assert(args.includes(f.plan.extensionsDir));assert(args.includes(f.plan.userDataDir));assert(args.includes('--do-not-sync'));
   assert(!options.shell);assert.equal(options.env.ELECTRON_RUN_AS_NODE,'1');assert.equal(options.env.NODE_OPTIONS,'');
   const installed=join(f.plan.extensionsDir,'m365relay.first-run-model-setup-0.1.0');await mkdir(installed,{recursive:true});
