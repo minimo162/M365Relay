@@ -66,3 +66,10 @@ test('reopening while inference is active neither cancels nor resends it',async 
  try{assert.deepEqual(await existingDesktopPlan(s.config),s.plan);assert.equal(calls,1);}finally{release();}
  assert.equal((await response).status,200);assert.equal(calls,1);
 });
+test('removed workspace and malformed ownership have actionable errors',async t=>{
+ const s=await setup(t);await s.register();
+ await assert.rejects(existingDesktopPlan(s.config,{workspace:join(s.home,'missing')}),{code:'workspace_not_found'});
+ await rm(s.plan.workspace,{recursive:true});await assert.rejects(existingDesktopPlan(s.config),{code:'workspace_not_found'});
+ await writeFile(join(s.home,'bridge.lock','owner.json'),'null');await assert.rejects(existingDesktopPlan(s.config),{code:'instance_unverifiable'});
+ await writeFile(join(s.home,'bridge.lock','desktop.json'),'null');await assert.rejects(existingDesktopPlan(s.config),{code:'instance_unverifiable'});
+});
