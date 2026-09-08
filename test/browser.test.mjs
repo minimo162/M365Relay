@@ -237,3 +237,19 @@ test('CDP errors do not expose raw page text',async()=>{
   const c=await CdpClient.connect('ws://fixture',{WebSocketClass:FakeWebSocket});const p=c.send('A');c.socket.reply({id:1,error:{message:'SECRET PAGE DATA'}});
   await assert.rejects(p,e=>e.code==='cdp_error'&&!e.message.includes('SECRET'));c.close();
 });
+
+test('editor replacement at end of attachment still receives the full stability interval',async()=>{
+ const f=fixture(),request=prepareRequest({model:MODEL,messages:[{role:'user',content:'test'}]},'test template');
+ request.definitionAttachments=[{fileName:'relay-tools-123456789abc.txt',bytes:Buffer.from('test')}];f.state.requestId=request.requestId;
+ let attachmentFinished=0,insertedAt=0;
+ const originalSend=f.browser.send;f.browser.send=async(method,...args)=>{if(method==='Input.insertText')insertedAt=Date.now();return originalSend(method,...args);};
+ const backend=new M365Backend({...config,readyTimeoutMs:500},{connect:async()=>f.browser,editorStableMs:40,inputPollMs:2,inputStableMs:3,sendReadyStableMs:3,
+  attachImages:async({onProgress,onBeforeUpload})=>{
+   await onBeforeUpload();await onProgress();await new Promise(r=>setTimeout(r,45));await onProgress();
+   f.nodes[config.selectors.editor[0]]=[{...f.editor}];await onProgress();
+   f.nodes[config.selectors.editor[0]]=[f.editor];attachmentFinished=Date.now();
+   return {verify:async()=>{},cleanup:async()=>{}};
+  }});
+ await backend.complete(request,{signal:AbortSignal.timeout(2000),onBeforeSend:async()=>{}});
+ assert(insertedAt-attachmentFinished>=40);assert.equal(f.state.sent,1);
+});

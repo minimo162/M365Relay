@@ -91,12 +91,14 @@ export class M365Backend {
         do {await delay(config.pollIntervalMs,signal);state=await evaluate('snapshot');if(state.editor&&!state.nonempty&&!state.input.trim()&&!state.busy)break;}while(Date.now()<resetDeadline);
       }
       assert(state.editor&&!state.nonempty&&!state.input.trim()&&!state.busy,'conversation_not_empty','会話の初期化を確認できません。送信を停止します。',409);
+      const readyArgs={requestId:request.requestId,stableMs:this.inputTiming.editorStableMs};
       if(this.selectModel){enter('model_select');await this.selectModel({browser,sessionId,config,signal});}
-      if(attachments.length){enter('image_attach');imageAttachment=await this.attachImages({browser,sessionId,config,images:attachments,signal,onBeforeUpload:async()=>{await onBeforeSend();sent=true;}});}
+      if(attachments.length){enter('image_attach');imageAttachment=await this.attachImages({browser,sessionId,config,images:attachments,signal,onProgress:()=>evaluate('editorReady',readyArgs),onBeforeUpload:async()=>{await onBeforeSend();sent=true;}});}
       // M365 can replace an already visible editor after document load. Wait on
       // the actual node identity, not just presence or document.readyState.
       enter('editor_stable');
-      const readyArgs={requestId:request.requestId,stableMs:this.inputTiming.editorStableMs};
+      // Attachment polling already observes the same empty editor. Replacements
+      // reset the existing DOM timer; the full stability interval is unchanged.
       const editorDeadline=Date.now()+config.readyTimeoutMs;let editorReady=false;
       do {
         abortReason(signal);
