@@ -51,4 +51,12 @@ const cell=JSON.parse(run(office,['get',sheet,'/Sheet1/A3','--json']));
 assert.equal(cell.data.results[0].format.computedValue,'3.5');
 const checked=JSON.parse(run(office,['validate',sheet,'--json']));
 assert.equal(checked.success,true);assert.equal(checked.data.count,0);
+const literalValues=['Literal <tag> &gt; "quoted"','  日本語😀 C:\\new\\notes.txt \\n  ','line1\nline2\tend','00123','=SUM(A1:A2)'];
+const batchPath=join(work,'literal-values.json');
+await writeFile(batchPath,JSON.stringify(literalValues.map((value,i)=>({command:'set',path:`/Sheet1/B${i+1}`,props:{value,type:'string'}}))),{flag:'wx'});
+run(office,['batch',sheet,'--input',batchPath]);
+for(const [i,value]of literalValues.entries()){
+ const readback=JSON.parse(run(office,['get',sheet,`/Sheet1/B${i+1}`,'--json']));
+ assert.equal(readback.data.results[0].text,value);
+}
 console.log('PASS bundled PDF text/coordinates/output protection and Office formula/readback/schema');
