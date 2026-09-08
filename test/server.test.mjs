@@ -12,11 +12,11 @@ const template=await readFile(new URL('../prompts/m365-tool-router.md',import.me
 const token='a'.repeat(64);
 const base={model:MODEL,messages:[{role:'user',content:'fixture question'}]};
 const final=(r,content='テスト回答')=>JSON.stringify({protocol:PROTOCOL,request_id:r.requestId,action:'final',content,tool_calls:[],complete:true});
-async function setup(t,complete,overrides={}){
+async function setup(t,complete,overrides={},instrumentation={}){
   const home=await mkdtemp(join(tmpdir(),'bridge-server-'));const config={token,home,requestTimeoutMs:3000,maxPromptChars:180000,maxQueue:4,...overrides};
   const ledger=new Ledger(home,token);await ledger.load();let calls=0;const log=[];
   const backend={complete:async(r,o)=>{calls++;return complete?complete(r,o):await o.onBeforeSend().then(()=>final(r));}};
-  const server=createBridgeServer({config,template,backend,ledger,log:x=>log.push(x)});
+  const server=createBridgeServer({config,template,backend,ledger,now:instrumentation.now,log:x=>{log.push(x);instrumentation.onLog?.(x);}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url=`http://127.0.0.1:${server.address().port}`;
   t.after(async()=>{await server.stop();await rm(home,{recursive:true,force:true});});
   const post=(body=base,headers={})=>fetch(url+'/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,...headers},body:JSON.stringify(body)});
@@ -110,4 +110,45 @@ test('queue cancellation removes only the cancelled waiter',async()=>{
 });
 test('queue capacity errors are explicit',async()=>{
   const q=new SerialQueue(0);const release=await q.acquire();await assert.rejects(q.acquire(),{code:'bridge_busy'});release();
+});
+
+test('HTTP queue timing separates waiting from backend execution without changing FIFO', {timeout:5000},async t=>{
+ let time=100,releaseFirst,started,queued;
+ const gate=new Promise(r=>releaseFirst=r),ready=new Promise(r=>started=r),waiting=new Promise(r=>queued=r),order=[];
+ const s=await setup(t,async(r,o)=>{const text=r.payload.messages[0].content;order.push(text);await o.onBeforeSend();if(text==='one'){started();await gate;}return final(r);},{},{now:()=>time,onLog:r=>{if(r.event==='queued')queued();}});
+ const body=text=>({...base,messages:[{role:'user',content:text}]});
+ try{
+  const first=s.post(body('one'));await ready;
+  const second=s.post(body('two'));await waiting;
+  assert.deepEqual(order,['one']);assert.equal(s.log.find(r=>r.event==='queued').queue_depth,1);
+  time=350;releaseFirst();assert.equal((await first).status,200);assert.equal((await second).status,200);
+  assert.deepEqual(order,['one','two']);assert.deepEqual(s.log.filter(r=>r.event==='accepted').map(r=>r.queue_wait_ms),[0,250]);
+  time=900;assert.equal((await s.post(body('three'))).status,200);
+  assert.equal(s.log.filter(r=>r.event==='accepted').at(-1).queue_wait_ms,0);
+ }finally{releaseFirst();}
+});
+
+test('a cancelled queued request reports its wait and never enters the backend', {timeout:5000},async t=>{
+ let time=100,releaseFirst,started,queued,failed;
+ const gate=new Promise(r=>releaseFirst=r),ready=new Promise(r=>started=r),waiting=new Promise(r=>queued=r),failure=new Promise(r=>failed=r);
+ const s=await setup(t,async(r,o)=>{await o.onBeforeSend();started();await gate;return final(r);},{},{now:()=>time,onLog:r=>{if(r.event==='queued')queued();if(r.event==='error')failed(r);}});
+ try{
+  const first=s.post();await ready;let cancelledRequest;
+  const second=new Promise((resolve,reject)=>{cancelledRequest=http.request(s.url+'/v1/chat/completions',{method:'POST',agent:false,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`}},resolve);cancelledRequest.on('error',reject);cancelledRequest.end(JSON.stringify({...base,messages:[{role:'user',content:'cancel me'}]}));});
+  const rejected=assert.rejects(second);await waiting;time=275;cancelledRequest.destroy();await rejected;
+  const error=await failure;assert.equal(error.queue_wait_ms,175);assert.equal(s.calls(),1);
+  releaseFirst();assert.equal((await first).status,200);assert.equal(s.log.filter(r=>r.event==='accepted').length,1);
+ }finally{releaseFirst();}
+});
+
+test('a full HTTP queue is rejected without a misleading queued event', {timeout:5000},async t=>{
+ let releaseFirst,started;const gate=new Promise(r=>releaseFirst=r),ready=new Promise(r=>started=r);
+ const s=await setup(t,async(r,o)=>{await o.onBeforeSend();started();await gate;return final(r);},{maxQueue:0},{now:()=>100});
+ try{
+  const first=s.post();await ready;
+  const response=await s.post({...base,messages:[{role:'user',content:'cannot queue'}]});
+  assert.equal(response.status,409);assert.equal((await response.json()).error.code,'bridge_busy');
+  assert.equal(s.log.filter(r=>r.event==='queued').length,0);assert.equal(s.log.find(r=>r.event==='error').queue_wait_ms,0);assert.equal(s.calls(),1);
+  releaseFirst();await first;
+ }finally{releaseFirst();}
 });
