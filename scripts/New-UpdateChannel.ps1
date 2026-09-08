@@ -29,6 +29,7 @@ if (Test-Path -LiteralPath $archiveTarget) {
     [IO.File]::Move($archiveTemp,$archiveTarget)
 }
 Copy-Item -LiteralPath (Join-Path $root 'launcher\M365Relay.cmd') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'launcher\Recover.cmd') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'launcher\Update.ps1') -Destination $launcherDir
 $utf8 = New-Object Text.UTF8Encoding($false)
 if (-not $Source) {

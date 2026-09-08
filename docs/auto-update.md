@@ -18,10 +18,12 @@ HTTPSの版情報取得には10秒、本体ダウンロードには180秒の要�
 ./scripts/New-UpdateChannel.ps1 -ZipPath ./dist/M365Relay-<version>-win-x64-<revision>.zip -OutputDirectory C:/Distribution/M365Relay
 ```
 
-出力は `M365Relay.cmd`、`_launcher/Update.ps1`、`_launcher/source.txt`、`_updates/update.json`、`_updates/<本体ZIP>` です。共有フォルダーではこの構成を保って配置してください。更新時は同じ出力先へ新版ZIPで再実行します。新版ZIPを配置してからupdate.jsonを原子的に切り替えます。
+出力は `M365Relay.cmd`、`Recover.cmd`、`_launcher/Update.ps1`、`_launcher/source.txt`、`_updates/update.json`、`_updates/<本体ZIP>` です。共有フォルダーではこの構成を保って配置してください。更新時は同じ出力先へ新版ZIPで再実行します。新版ZIPを配置してからupdate.jsonを原子的に切り替えます。
 
-HTTPSでは `-Source https://<配布先>/update.json` を指定し、`_updates` 内のupdate.jsonとZIPをそのURLの同じディレクトリへ公開します。利用者へ渡すのはM365Relay.cmdと_launcherだけです。GitHub Releasesの `/releases/latest/download/update.json` と同一リリースのZIP添付も、この構成で利用できます。認証が必要な配布先のサインイン支援は含みません。
+HTTPSでは `-Source https://<配布先>/update.json` を指定し、`_updates` 内のupdate.jsonとZIPをそのURLの同じディレクトリへ公開します。利用者へ渡すのはM365Relay.cmd、Recover.cmdと_launcherです。GitHub Releasesの `/releases/latest/download/update.json` と同一リリースのZIP添付も、この構成で利用できます。認証が必要な配布先のサインイン支援は含みません。
 
-起動ファイル側は本体とは別管理で、現在は自己更新しません。今回の変更で公開先へアップロードしたわけではありません。公開済みのURLでのHTTPSダウンロードは別途確認が必要です。
+起動ファイル側は本体とは別管理で、現在は自己更新しません。公開v0.2.17ではlatest URLからの本体取得と検証を確認済みです。起動ファイル側の更新は新しい起動用ZIPを展開してください。
 
 検査: `scripts/Test-Updater.ps1 -FirstZip <旧ZIP> -SecondZip <新ZIP>`。初回取得、キャッシュ再利用、更新、改ざんZIP、パス逸脱、壊れたメタデータ、排他、壊れたローカル本体、利用者ファイル保持をWindows PowerShell 5.1で検査します。
+
+異常終了後に起動ロックが残った場合は、起動ファイルと同じ場所の `Recover.cmd` を開きます。検証済み本体で停止済みプロセスのロックだけを復旧し、動作中のプロセスがあれば拒否します。成功したら `M365Relay.cmd` を開き直してください。

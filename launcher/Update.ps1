@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 [CmdletBinding()]
-param([string]$Source, [string]$LocalRoot, [string]$Workspace, [switch]$SyncOnly)
+param([string]$Source, [string]$LocalRoot, [string]$Workspace, [switch]$SyncOnly, [ValidateSet('run','recover-lock')][string]$Action = 'run')
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version 2.0
@@ -137,8 +137,8 @@ try {
     if ($SyncOnly) { Write-Output $selected; exit 0 }
     $env:M365_RELAY_HOME = $LocalRoot
     $env:NODE_OPTIONS = $null; $env:NODE_PATH = $null
-    Write-Host 'ローカルのM365Relayを起動します。'
-    & (Join-Path $selected 'scripts\Launch.ps1') -Action run -Workspace $Workspace
+    if ($Action -eq 'recover-lock') { Write-Host '停止済みプロセスの起動ロックを確認します。' } else { Write-Host 'ローカルのM365Relayを起動します。' }
+    & (Join-Path $selected 'scripts\Launch.ps1') -Action $Action -Workspace $Workspace
     exit $LASTEXITCODE
 } catch {
     [Console]::Error.WriteLine('M365Relayを起動できませんでした。配布元への接続を確認して、もう一度起動してください。')

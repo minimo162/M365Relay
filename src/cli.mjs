@@ -42,7 +42,7 @@ async function main(){
   if(command==='recover-lock'){await recoverProcessLock(homePath());console.log('停止済みプロセスの起動ロックを削除しました。要求台帳は保持しています。');return;}
   const config={...await loadConfig(),allowImages:true,attachToolDefinitions:true};
   let desktop;
-  if(command==='setup'||command==='run'){
+  if(command==='setup'){
     assert(process.platform==='win32','windows_required','Run.cmdはWindows用です。');
     const executable=await findVSCode();
     desktop=await prepareDesktop(config,{executable,workspace:process.argv[3]});
@@ -66,7 +66,15 @@ async function main(){
     server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log,selectModel:selectThinkDeeper,attachImages:attachRequestImages}),ledger,log});
     const shutdown=async()=>{await server.stop();await runLog.flush();await unlock();process.exit(0);};
     process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
-    await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(config.port,'127.0.0.1',resolve);});
+    await new Promise((resolve,reject)=>{server.once('error',error=>reject(error.code==='EADDRINUSE'
+      ?new BridgeError('bridge_port_in_use',`接続ポート ${config.port} は使用中です。M365Relayが起動済みなら、その起動ウィンドウを使用してください。別のアプリが使用している場合は、そのアプリを終了してから起動し直してください。`,409)
+      :error));server.listen(config.port,'127.0.0.1',resolve);});
+    // Reserve both the process lock and HTTP port before changing the dedicated profile.
+    if(command==='run'){
+      assert(process.platform==='win32','windows_required','Run.cmdはWindows用です。');
+      const executable=await findVSCode();
+      desktop=await prepareDesktop(config,{executable,workspace:process.argv[3]});
+    }
     if(desktop){
       await openEdge(config);
       await launchDesktop(desktop);
