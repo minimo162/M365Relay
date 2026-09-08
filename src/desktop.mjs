@@ -53,7 +53,7 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
  }else{
   await mkdir(folder,{recursive:true});
   try{await writeFile(join(folder,'はじめに.md'),
-   '# M365Relay\n\n1. 専用EdgeでM365 Copilotにサインインします。\n2. VS CodeのチャットでM365Relayを選び、依頼を入力します。\n3. 作業する別のフォルダーは「ファイル → フォルダーを開く」で選べます。\n\nVS Codeの承認画面で操作内容を確認してください。最初は非機密のファイルで動作を確認します。\n接続を終了するには、M365Relayの起動ウィンドウでCtrl+Cを押します。\n',
+   '# M365Relay\n\n1. 専用EdgeでM365 Copilotにサインインします。\n2. VS CodeのチャットでM365Relayを選び、依頼を入力します。\n3. 作業する別のフォルダーは「ファイル → フォルダーを開く」で選べます。\n\n新しいチャットは、自動で操作を進めるAutopilot (Preview)が既定です。権限は入力欄下で切り替えられます。承認画面が表示された場合は内容を確認してください。最初は非機密のファイルで動作を確認します。\n接続を終了するには、M365Relayの起動ウィンドウでCtrl+Cを押します。\n',
    {flag:'wx',mode:0o600});}catch(e){if(e.code!=='EEXIST')throw e;}
  }
  // Native async realpath also resolves Windows packaged-app redirection. A
