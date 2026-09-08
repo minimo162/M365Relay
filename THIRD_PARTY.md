@@ -42,8 +42,10 @@ from wheel .data/scripts are not installed; the app uses library APIs.
 OfficeCLI and LiteParse are not included in this distribution. Historical
 comparison notes and their original notices in the source repository describe
 earlier releases, not current runtime dependencies. python-docx/python-pptx/lxml
-are also not included: the tested lxml wheel was blocked by Windows application
-control. That control was not disabled or bypassed.
+are also not included. The user chose not to bundle python-pptx; PowerPoint
+creation uses installed Microsoft Office. An earlier lxml test was blocked by
+Windows application control, which was not disabled or bypassed. Resolving that
+block is not a prerequisite for this distribution.
 
 Microsoft Office is not redistributed. Optional native Office operations use
 the user's installed desktop applications through Windows PowerShell COM.
