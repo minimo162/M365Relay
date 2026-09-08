@@ -163,3 +163,30 @@ test('final review preserves colons and nested Markdown inside a longer transpor
  assert.throws(()=>parseEnvelope(`${fence}text\nBRIDGE_FINAL_V2 ${r.requestId}\n${body}\n${fence}`,r));
  assert.throws(()=>parseEnvelope(`${fence}text\nBRIDGE_FINAL_V2 00000000-0000-0000-0000-000000000000\n${body}\nEND_BRIDGE_FINAL_V2\n${fence}`,r));
 });
+
+test('final JSON string roundtrips nested code, tags, escapes and boundary whitespace exactly once',()=>{
+ const r=request({tools:[]});
+ const body='  レビュー:\n```vba\nMsgBox Prompt:="結果: " & n\n```\n<summary>完了</summary>\nC:\\Work\\_data \\n &gt; 😀\n';
+ const raw=`BRIDGE_FINAL_JSON ${r.requestId}\n${JSON.stringify(body)}\nEND_BRIDGE_FINAL_JSON`;
+ assert.equal(parseEnvelope(raw,r).content,body);
+ assert.equal(parseEnvelope('```text\n'+raw+'\n```',r).content,body);
+ for(const suffix of ['\n``','\nextra'])assert.throws(()=>parseEnvelope(raw+suffix,r));
+ assert.throws(()=>parseEnvelope(raw.replace(r.requestId,'00000000-0000-0000-0000-000000000000'),r));
+ for(const value of ['{}','null','42','"broken\\q"','""','"a" "b"'])assert.throws(()=>parseEnvelope(`BRIDGE_FINAL_JSON ${r.requestId}\n${value}\nEND_BRIDGE_FINAL_JSON`,r));
+ assert.throws(()=>parseEnvelope(raw.replace('END_BRIDGE_FINAL_JSON','END_BRIDGE_FINAL_V2'),r));
+ const required=request({tool_choice:'required'});
+ assert.throws(()=>parseEnvelope(`BRIDGE_FINAL_JSON ${required.requestId}\n"answer"\nEND_BRIDGE_FINAL_JSON`,required),{code:'tool_choice_violation'});
+});
+
+test('final JSON string still validates the decoded response schema',()=>{
+ const r=request({tools:[],response_format:{type:'json_schema',json_schema:{schema:{type:'object',properties:{ok:{type:'boolean'}},required:['ok'],additionalProperties:false}}}});
+ const raw=content=>`BRIDGE_FINAL_JSON ${r.requestId}\n${JSON.stringify(content)}\nEND_BRIDGE_FINAL_JSON`;
+ assert.equal(parseEnvelope(raw('{"ok":true}'),r).content,'{"ok":true}');
+ assert.throws(()=>parseEnvelope(raw('{"ok":"true"}'),r),{code:'invalid_final_format'});
+});
+
+test('final JSON prompt example decodes quotes and a real newline once',()=>{
+ const r=request({tools:[]});
+ const example=r.prompt.split(`BRIDGE_FINAL_JSON ${r.requestId}\n`)[1].split('\nEND_BRIDGE_FINAL_JSON')[0];
+ assert.equal(JSON.parse(example),'回答です。\n補足: "引用符"とコードも保持します。');
+});
