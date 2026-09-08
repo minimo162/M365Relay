@@ -48,6 +48,11 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Python document storage contracts failed.' }
     & (Join-Path $app 'runtime\python\python.exe') -I -B (Join-Path $PSScriptRoot '../test/python-image-probe.py') $temp
     if ($LASTEXITCODE -ne 0) { throw 'Bundled Pillow operations failed.' }
+    $observer=Join-Path $app 'scripts\Observe-Desktop.ps1'
+    Move-Item -LiteralPath $observer -Destination "$observer.saved"
+    & $bridge help
+    if ($LASTEXITCODE -eq 0) { throw 'Missing desktop observer was accepted.' }; $checks++
+    Move-Item -LiteralPath "$observer.saved" -Destination $observer
     $python = Join-Path $app 'runtime\python\python.exe'
     Move-Item -LiteralPath $python -Destination "$python.saved"
     & $bridge help

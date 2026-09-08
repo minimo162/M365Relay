@@ -57,9 +57,9 @@ try {
     Copy-Item -LiteralPath (Join-Path $root 'config\node-runtime.lock.json') -Destination (Join-Path $stage 'config')
     Copy-Item -LiteralPath (Join-Path $root 'config\python-runtime.lock.json') -Destination (Join-Path $stage 'config')
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'scripts')
-    foreach ($name in @('Launch.ps1','Verify-Distribution.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $stage 'scripts') }
+    foreach ($name in @('Launch.ps1','Verify-Distribution.ps1','Observe-Desktop.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $stage 'scripts') }
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'docs')
-    foreach ($name in @('acceptance.md','architecture.md','distribution.md','auto-update.md','test-results.md','sources.md','schema-compatibility.md','input-compatibility.md','dom-compatibility.md','release-notes.md','python-runtime.md','review-answer-framing.md','first-run-model-setup.md','context-attachments-design.md','queue-timing.md')) { Copy-Item -LiteralPath (Join-Path $root "docs\$name") -Destination (Join-Path $stage 'docs') }
+    foreach ($name in @('acceptance.md','architecture.md','distribution.md','auto-update.md','test-results.md','sources.md','schema-compatibility.md','input-compatibility.md','dom-compatibility.md','release-notes.md','python-runtime.md','review-answer-framing.md','first-run-model-setup.md','context-attachments-design.md','queue-timing.md','desktop-startup-status.md')) { Copy-Item -LiteralPath (Join-Path $root "docs\$name") -Destination (Join-Path $stage 'docs') }
     $files = @(Get-ChildItem -LiteralPath $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
         [ordered]@{ path = $_.FullName.Substring($stage.Length + 1).Replace('\','/'); sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     })

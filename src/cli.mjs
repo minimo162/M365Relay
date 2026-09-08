@@ -8,7 +8,7 @@ import { createBridgeServer } from './server.mjs';
 import { M365Backend, diagnoseBrowser } from './m365.mjs';
 import { connectOwnedBrowser } from './cdp.mjs';
 import { BridgeError, publicError, assert } from './errors.mjs';
-import { findVSCode,prepareDesktop,launchDesktop } from './desktop.mjs';
+import { findVSCode,prepareDesktop,launchDesktop,desktopLaunchMessage } from './desktop.mjs';
 import { createRunLog } from './run-log.mjs';
 import { selectThinkDeeper } from './model-selection.mjs';
 import { attachRequestImages } from './image-attachments.mjs';
@@ -64,8 +64,12 @@ async function main(){
     if(command!=='run'||error.code!=='already_running')throw error;
     // No profile setup, token transmission, lock recovery or request replay.
     const plan=await existingDesktopPlan(config,{workspace:process.argv[3]});
-    plan.executable=await findVSCode();await launchDesktop(plan);
-    console.log('起動済みのM365Relayの画面を開きました。');return;
+    plan.executable=await findVSCode();console.log('VS Codeの起動を確認しています。');const receipt=await launchDesktop(plan);
+    const launchLog=await createRunLog(config.home,{jsonConsole:process.env.M365_RELAY_JSON_LOGS==='1'});
+    launchLog.log({event:'desktop_launch',desktop_status:receipt.status,exit_code:receipt.exitCode});await launchLog.flush();
+    console.log(desktopLaunchMessage(receipt));
+    if(!['window','handoff'].includes(receipt.status))process.exitCode=1;
+    return;
   }
   let server,runLog;
   try{
@@ -89,9 +93,12 @@ async function main(){
     }
     if(desktop){
       await openEdge(config);
-      await launchDesktop(desktop);
+      console.log('VS Codeの起動を確認しています。');
+      const receipt=await launchDesktop(desktop);
+      log({event:'desktop_launch',desktop_status:receipt.status,exit_code:receipt.exitCode});
       proveInstance=await registerDesktopInstance(config,desktop);
-      console.log('接続の準備ができました。専用Edgeのサインインを確認し、VS Codeのチャットで依頼を入力してください。\nこのウィンドウを閉じると接続が終了します。');
+      console.log(desktopLaunchMessage(receipt));
+      console.log('接続サーバーは起動しています。専用EdgeのサインインとVS Codeの画面を確認してください。\nこのウィンドウを閉じると接続が終了します。');
     }
     const {version}=JSON.parse(await readFile(join(ROOT,'package.json'),'utf8'));
     console.log(`M365Relay ${version} (実M365で基本往復確認済み・ツール通し動作は検証中)\nEndpoint: http://127.0.0.1:${config.port}/v1/chat/completions\n終了: Ctrl+C`);

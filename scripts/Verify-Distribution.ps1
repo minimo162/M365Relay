@@ -27,7 +27,7 @@ foreach ($entry in $files) {
     finally { $stream.Dispose(); $hasher.Dispose() }
     if ($digest -cne $entry.sha256) { throw "Distribution hash mismatch: $relative" }
 }
-foreach ($required in @('runtime/node.exe','runtime/LICENSE','src/cli.mjs','src/desktop.mjs','src/run-log.mjs','src/model-selection.mjs','config/node-runtime.lock.json','prompts/m365-tool-router.md','scripts/Launch.ps1','scripts/Verify-Distribution.ps1','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd')) {
+foreach ($required in @('runtime/node.exe','runtime/LICENSE','src/cli.mjs','src/desktop.mjs','src/run-log.mjs','src/model-selection.mjs','config/node-runtime.lock.json','prompts/m365-tool-router.md','scripts/Launch.ps1','scripts/Verify-Distribution.ps1','scripts/Observe-Desktop.ps1','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd')) {
     if (-not $seen.ContainsKey($required)) { throw "Required manifest entry missing: $required" }
 }
 if ((Get-FileHash -LiteralPath (Join-Path $root 'runtime\node.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lock.executableSha256) { throw 'Bundled Node.js does not match the official pinned executable.' }

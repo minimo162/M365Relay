@@ -5,13 +5,15 @@ import {safeDiagnostics} from './diagnostics.mjs';
 
 const phases=['connect','open_tab','attach_tab','wait_editor','reset_conversation','model_select','image_attach','editor_stable','input_before','input_focus','input_insert','input_settle','send_ready','before_send','send','response_wait','response_validate','cleanup'];
 export function logMetadata(record){
-  if(!['queued','accepted','response_returned','error','backend_timing'].includes(record?.event))return null;
+  if(!['desktop_launch','queued','accepted','response_returned','error','backend_timing'].includes(record?.event))return null;
   const out={time:new Date().toISOString(),event:record.event};
   if(typeof record.request_id==='string'&&/^[a-f0-9-]{36}$/i.test(record.request_id))out.request_id=record.request_id;
   for(const key of ['prompt_chars','tools','queue_wait_ms','queue_depth','total_ms','response_snapshots','first_reply_observed_ms','last_reply_change_observed_ms']){
     if(Number.isSafeInteger(record[key])&&record[key]>=0)out[key]=record[key];
   }
   if(['tool_calls','final'].includes(record.kind))out.kind=record.kind;
+  if(['window','handoff','failed','unconfirmed'].includes(record.desktop_status))out.desktop_status=record.desktop_status;
+  if(Number.isSafeInteger(record.exit_code))out.exit_code=record.exit_code;
   if(['success','error','cancelled'].includes(record.outcome))out.outcome=record.outcome;
   if(typeof record.possibly_sent==='boolean')out.possibly_sent=record.possibly_sent;
   if(typeof record.code==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(record.code))out.code=record.code;
