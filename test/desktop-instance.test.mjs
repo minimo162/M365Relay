@@ -63,6 +63,12 @@ test('proof route rejects browser origin and is unavailable until ready',async t
  assert.equal((await fetch(url,{headers:{Origin:'https://example.com'}})).status,403);
  const result=await (await fetch(url)).json();assert.deepEqual(Object.keys(result),['proof']);assert(!JSON.stringify(result).includes(s.home));
 });
+
+test('a signed bootstrap plan still must use this profile extension directory',async t=>{
+ const s=await setup(t);await mkdir(join(s.home,'vscode-extensions'));
+ await s.register({...s.plan,extensionsDir:join(s.home,'other')});
+ await assert.rejects(existingDesktopPlan(s.config),{code:'instance_unverifiable'});
+});
 test('reopening while inference is active neither cancels nor resends it',async t=>{
  let enter,release,calls=0;
  const entered=new Promise(r=>enter=r),waiting=new Promise(r=>release=r);

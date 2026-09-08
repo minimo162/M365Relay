@@ -45,6 +45,7 @@ try {
     if ($LASTEXITCODE -ne 0 -or $actualVersion -cne "v$($lock.version)") { throw 'Bundled runtime version check failed.' }
     & (Join-Path $PSScriptRoot 'Prepare-PythonRuntime.ps1') -Destination (Join-Path $runtime 'python') -CacheDirectory $PythonCacheDirectory
     Copy-Item -LiteralPath (Join-Path $root 'python') -Destination (Join-Path $stage 'python') -Recurse
+    & (Join-Path $PSScriptRoot 'Build-Bootstrap.ps1') -Destination (Join-Path $stage 'vscode-bootstrap')
     # Curated distribution: never copy local settings, tokens, profiles, logs or npm.
     foreach ($relative in @('src','prompts','config','README.md','THIRD_PARTY.md','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd','Open-Copilot.cmd','Start-Bridge.cmd','package.json')) {
         if ($relative -in @('src','prompts','config')) {
@@ -58,7 +59,7 @@ try {
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'scripts')
     foreach ($name in @('Launch.ps1','Verify-Distribution.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $stage 'scripts') }
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'docs')
-    foreach ($name in @('acceptance.md','architecture.md','distribution.md','auto-update.md','test-results.md','sources.md','schema-compatibility.md','input-compatibility.md','dom-compatibility.md','release-notes.md','python-runtime.md','review-answer-framing.md')) { Copy-Item -LiteralPath (Join-Path $root "docs\$name") -Destination (Join-Path $stage 'docs') }
+    foreach ($name in @('acceptance.md','architecture.md','distribution.md','auto-update.md','test-results.md','sources.md','schema-compatibility.md','input-compatibility.md','dom-compatibility.md','release-notes.md','python-runtime.md','review-answer-framing.md','first-run-model-setup.md')) { Copy-Item -LiteralPath (Join-Path $root "docs\$name") -Destination (Join-Path $stage 'docs') }
     $files = @(Get-ChildItem -LiteralPath $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
         [ordered]@{ path = $_.FullName.Substring($stage.Length + 1).Replace('\','/'); sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     })
