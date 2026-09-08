@@ -186,10 +186,14 @@ export class M365Backend {
     }
   }
 }
-export async function diagnoseBrowser(config){
-  const signal=AbortSignal.timeout(10000),browser=await connectOwnedBrowser(config,signal);
+export async function diagnoseBrowser(config,{connect=connectOwnedBrowser}={}){
+  const signal=AbortSignal.timeout(10000),browser=await connect(config,signal);
   try{const {targetInfos}=await browser.send('Target.getTargets',{},undefined,signal);
-    return {profile_verified:true,m365_tabs:(targetInfos??[]).filter(t=>{try{return t.type==='page'&&new URL(t.url).origin===config.origin;}catch{return false;}}).length,
-      live_send_performed:false};
+    const pages=(targetInfos??[]).filter(t=>t.type==='page');
+    const m365Tabs=pages.filter(t=>{try{return new URL(t.url).origin===config.origin;}catch{return false;}});
+    const signInTabs=pages.filter(t=>{try{return /^https:\/\/(login|account|login\.live)\./i.test(new URL(t.url).origin);}catch{return false;}});
+    return {profile_verified:true,m365_tabs:m365Tabs.length,
+      m365_state:m365Tabs.length?'m365_page_observed':signInTabs.length?'sign_in_required':'not_verified',
+      model_state:'not_verified',live_send_performed:false};
   }finally{browser.close();}
 }
