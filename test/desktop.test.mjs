@@ -21,6 +21,7 @@ test('first-run setup creates an isolated usable model without modifying a norma
  assert.equal(settings['chat.utilityModel'],'customendpoint/m365-copilot-ui');
  assert.equal(settings['editor.fontSize'],16);assert.equal(settings['chat.fontSize'],16);
  assert.equal(settings['chat.editor.fontSize'],16);assert.equal(settings['window.zoomLevel'],1);
+ assert.equal(settings['chat.permissions.default'],'autopilot');
  assert.equal(settings['workbench.startupEditor'],'none');
  assert.equal(settings['workbench.secondarySideBar.defaultVisibility'],'maximized');
  assert.equal(settings['chat.viewSessions.enabled'],true);

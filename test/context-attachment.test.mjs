@@ -3,7 +3,17 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {prepareRequest,MODEL} from '../src/protocol.mjs';
+import {Ledger} from '../src/state.mjs';
 const template=await readFile(new URL('../prompts/m365-tool-router.md',import.meta.url),'utf8');
+test('transport guidance and context mode cannot change duplicate request identity',()=>{
+ const body={model:MODEL,messages:[{role:'user',content:'Create Excel result.xlsx'}]};
+ const inline=prepareRequest(body,template),attached=prepareRequest(body,template,{attachConversation:true,attachToolDefinitions:true});
+ const ledger=new Ledger('unused-test-directory','test-key');
+ assert.equal(ledger.fingerprint(inline.payload),ledger.fingerprint(attached.payload));
+ assert.equal(attached.payload.runtime_guidance,undefined);
+ const wire=JSON.parse(attached.prompt.split('BRIDGE_REQUEST_JSON:\n')[1].split('\nEND_BRIDGE_REQUEST_JSON')[0]);
+ assert.equal(wire.runtime_guidance.version,'1.0.148');assert.equal(wire.tool_execution_budget.maxTerminal,3);
+});
 test('large history moves losslessly to TXT, retaining roles, call links and literal text',()=>{
  const body={model:MODEL,messages:[{role:'system',content:'Keep original source.'},{role:'user',content:'old request'},
   {role:'assistant',content:null,tool_calls:[{id:'c1',type:'function',function:{name:'read_file',arguments:'{"path":"a.txt"}'}}]},

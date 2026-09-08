@@ -93,6 +93,7 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
     'workbench.secondarySideBar.defaultVisibility':'maximized','workbench.sideBar.location':'left',
     'chat.viewSessions.enabled':true,'chat.viewSessions.orientation':'sideBySide',
     'security.workspace.trust.enabled':false,
+    'chat.permissions.default':'autopilot',
     'terminal.integrated.env.windows':{...terminalEnv,M365_RELAY_NODE:runtimeExecutable,M365_RELAY_PDF:pdfCommand,
       ...(officeExecutable?{M365_RELAY_OFFICECLI:officeExecutable,OFFICECLI_SKIP_UPDATE:'1',OFFICECLI_NO_AUTO_RESIDENT:'1',OFFICECLI_RESIDENT_FLUSH:'each'}:{})}};
  });
