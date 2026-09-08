@@ -172,3 +172,5 @@ PDF本文の抽出能力はVS Code側で利用可能なツールに依存しま�
 長文と画像の実M365搬送に加え、実VS Codeの固定1ページPDF課題で、追加助言なしのExcel作成・数式と注記の保持・画像確認・最終回答まで約139秒で確認しました。大規模文書や反復成功率は未検証です。[設計](docs/context-attachments-design.md)と[文書試験の経緯・検証範囲](docs/office-string-transport.md)を参照してください。
 
 利用者指定により、M365Relay専用VS Codeの新規チャット既定はAutopilot（Preview）です。設定キーは `chat.permissions.default: autopilot` で、通常のVS Codeプロファイルへは適用しません。
+
+0.2.22では、起動済みの状態で起動ファイルを再実行すると、接続先を照合して起動時の作業フォルダーの専用画面を開きます。処理中の要求を再送せず、設定も書き換えません。旧版や確認できない接続先では停止します。[再表示の仕様と実測](docs/reopen-running.md)を参照してください。
