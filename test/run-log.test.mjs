@@ -26,3 +26,15 @@ test('run log write failure and size cap do not stop status reporting',async t=>
  const capped=await createRunLog(await home(t),{print:s=>printed.push(s),warn:s=>warnings.push(s),maxBytes:1,append:async()=>assert.fail('over-limit write')});
  capped.log({event:'accepted'});await capped.flush();assert.equal(warnings.length,2);
 });
+
+test('queue telemetry remains numeric and does not serialize arbitrary queued data',async t=>{
+ const printed=[],logger=await createRunLog(await home(t),{print:s=>printed.push(s)});
+ logger.log({event:'queued',queue_depth:2,prompt:'PRIVATE',authorization:'SECRET'});
+ logger.log({event:'accepted',queue_wait_ms:250});
+ logger.log({event:'error',code:'cancelled',queue_wait_ms:175});
+ logger.log({event:'queued',queue_depth:'SECRET',queue_wait_ms:-1,content:'PRIVATE'});
+ await logger.flush();const raw=await readFile(logger.path,'utf8'),rows=raw.trim().split('\n').map(JSON.parse);
+ assert(!/PRIVATE|SECRET/.test(raw));assert.equal(rows[0].queue_depth,2);assert.equal(rows[1].queue_wait_ms,250);assert.equal(rows[2].queue_wait_ms,175);
+ assert.equal(rows[3].queue_depth,undefined);assert.equal(rows[3].queue_wait_ms,undefined);
+ assert(printed.includes('先行する要求の完了を待っています。'));
+});

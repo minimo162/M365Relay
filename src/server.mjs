@@ -15,10 +15,10 @@ async function bodyText(req,maxBytes) {
   try{return new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks));}
   catch{throw new BridgeError('invalid_utf8','要求はUTF-8である必要があります。');}
 }
-export function createBridgeServer({config,template,backend,ledger,log=()=>{},instanceProof=()=>undefined}) {
+export function createBridgeServer({config,template,backend,ledger,log=()=>{},instanceProof=()=>undefined,now=()=>performance.now()}) {
   const queue=new SerialQueue(config.maxQueue);const controllers=new Set();
   const server=http.createServer(async(req,res)=>{
-    let parsed, timer, release, fingerprint, possiblySent=false, settled=false;
+    let parsed, timer, release, fingerprint, queueStarted, queueWaitMs, possiblySent=false, settled=false;
     const client=new AbortController();controllers.add(client);
     const signal=AbortSignal.any([client.signal,AbortSignal.timeout(config.requestTimeoutMs)]);
     const aborted=()=>{if(!res.writableEnded)client.abort(new DOMException('Client disconnected','AbortError'));};
@@ -40,9 +40,11 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{},in
       const maxBodyBytes=(config.allowImages?20:2)*1024*1024;
       const body=strictJson(await bodyText(req,maxBodyBytes),{maxBytes:maxBodyBytes});
       parsed=prepareRequest(body,template,config);
-      release=await queue.acquire(signal);abortReason(signal);
+      queueStarted=now();
+      if(queue.active&&queue.waiters.length<queue.maxQueue)log({request_id:parsed.requestId,event:'queued',queue_depth:queue.waiters.length+1});
+      release=await queue.acquire(signal);queueWaitMs=Math.round(now()-queueStarted);abortReason(signal);
       fingerprint=await ledger.reserve(parsed);
-      log({request_id:parsed.requestId,event:'accepted',prompt_chars:parsed.prompt.length,tools:parsed.payload.tools.length});
+      log({request_id:parsed.requestId,event:'accepted',queue_wait_ms:queueWaitMs,prompt_chars:parsed.prompt.length,tools:parsed.payload.tools.length});
       if(parsed.stream) {
         res.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-store','X-Accel-Buffering':'no'});
         res.write(': bridge waiting for a complete validated response\n\n');
@@ -63,7 +65,8 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{},in
       if(fingerprint&&!settled) {
         try{await ledger.set(fingerprint,possiblySent?'unknown_or_invalid':'not_sent');}catch{}
       }
-      log({request_id:parsed?.requestId??null,event:'error',code:safe.code,details:safe.details});
+      log({request_id:parsed?.requestId??null,event:'error',code:safe.code,details:safe.details,
+        queue_wait_ms:queueWaitMs??(queueStarted===undefined?undefined:Math.round(now()-queueStarted))});
       if(!res.destroyed&&!res.writableEnded) {
         if(res.headersSent) {res.write(`data: ${JSON.stringify({error:safe})}\n\n`);res.end('data: [DONE]\n\n');}
         else json(res,error instanceof BridgeError?error.status:signal.aborted?504:500,{error:safe});
