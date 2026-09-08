@@ -12,7 +12,7 @@ test('transport guidance and context mode cannot change duplicate request identi
  assert.equal(ledger.fingerprint(inline.payload),ledger.fingerprint(attached.payload));
  assert.equal(attached.payload.runtime_guidance,undefined);
  const wire=JSON.parse(attached.prompt.split('BRIDGE_REQUEST_JSON:\n')[1].split('\nEND_BRIDGE_REQUEST_JSON')[0]);
- assert.equal(wire.runtime_guidance.version,'1.0.148');assert.equal(wire.tool_execution_budget.maxTerminal,3);
+ assert.equal(wire.runtime_guidance.version,'3.13.15');assert.equal(Object.hasOwn(wire,'tool_execution_budget'),false);
 });
 test('large history moves losslessly to TXT, retaining roles, call links and literal text',()=>{
  const body={model:MODEL,messages:[{role:'system',content:'Keep original source.'},{role:'user',content:'old request'},

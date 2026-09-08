@@ -17,19 +17,35 @@ A hash match is not a claim that a PGP signature or Windows Authenticode signatu
 VS Code, Microsoft Edge, and Microsoft 365 Copilot are not redistributed by this project.
 M365Relay is an independent adapter, not an official Microsoft product or API.
 
-OfficeCLI 1.0.148 (Apache-2.0) is redistributed unmodified as a self-contained Windows
-x64 executable in `runtime/officecli`. Its LICENSE, NOTICE and THIRD-PARTY-NOTICES.txt
-are preserved there. Source: https://github.com/iOfficeAI/OfficeCLI/tree/0a450e43389531eadf05510dff209d541c1dec1e
-Executable and notice hashes are pinned in `config/officecli-runtime.lock.json`.
-Its own updater and automatic resident mode are disabled in the dedicated environment;
-M365Relay's distribution manages its version. Rendering can require an external browser.
+Python 3.13.15 is the official Windows x64 embeddable distribution. Its
+LICENSE.txt and upstream binaries are preserved under runtime/python. The _pth
+configuration adds only the bundled site-packages; pip, Tcl/Tk, the full Python
+installer and user/global packages are not included.
 
-LiteParse 2.14.4 (Apache-2.0), its Windows x64 native package/PDFium, and commander
-are included under `runtime/liteparse/node_modules`. Source: https://github.com/run-llama/liteparse
-Exact package versions, download URLs and integrity hashes are recorded in
-`runtime/liteparse/package-lock.json`. LiteParse LICENSE, matching PDFium build
-notices, Rust dependency notices, Tesseract/Leptonica notices, and unmodified source
-archives for MPL-2.0 resvg/usvg are under `runtime/liteparse/notices`.
-PROVENANCE.md records the source versions, verification method and its limits.
-OCR is disabled in the bundled PDF command; no OCR server or cloud parser is configured.
-The embedded native engine includes third-party code whose notices must remain with it.
+The exact Python.org archive and PyPI wheels, versions and SHA-256 hashes are in
+config/python-runtime.lock.json. Each wheel retains its dist-info metadata and
+license files in runtime/python/Lib/site-packages. PDFium notices remain under
+pypdfium2_raw. Native components include PDFium, Pillow image/font support,
+and Python's standard runtime DLLs. Their presence is documented separately
+from the user's report that Pillow appears on the company library list.
+
+Included packages: openpyxl (MIT), et_xmlfile (MIT), pypdf (BSD-3-Clause),
+pypdfium2 (Apache-2.0/BSD-3-Clause; see its bundled notices for PDFium and its
+dependencies), and Pillow (HPND plus its bundled dependency notices).
+
+PNG output uses Python's standard zlib/struct on PDFium-rendered pixels.
+Pillow 12.3.0 is also bundled for general image processing. Only the optional
+AVIF native codec is omitted (about 8 MB); its plugin handles this as unsupported.
+All license notices are retained. Console entry-point scripts
+from wheel .data/scripts are not installed; the app uses library APIs.
+
+OfficeCLI and LiteParse are not included in this distribution. Historical
+comparison notes and their original notices in the source repository describe
+earlier releases, not current runtime dependencies. python-docx/python-pptx/lxml
+are also not included. The user chose not to bundle python-pptx; PowerPoint
+creation uses installed Microsoft Office. An earlier lxml test was blocked by
+Windows application control, which was not disabled or bypassed. Resolving that
+block is not a prerequisite for this distribution.
+
+Microsoft Office is not redistributed. Optional native Office operations use
+the user's installed desktop applications through Windows PowerShell COM.

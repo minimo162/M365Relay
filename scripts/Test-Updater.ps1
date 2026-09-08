@@ -59,6 +59,16 @@ $second=Get-Content $currentPath -Raw | ConvertFrom-Json
 if ($first.revision -eq $second.revision) { throw 'Update did not activate a new revision.' }; $count++
 $secondBytes=[IO.File]::ReadAllText($currentPath)
 $metadata=[IO.File]::ReadAllText($source)
+# Test the new release in a deeper cache without requiring the old release's
+# startup verifier to support this newly fixed path length.
+$longRoot = Join-Path $trial 'Local user with long installation directory'
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'launcher\Update.ps1') -Source $source -LocalRoot $longRoot -SyncOnly
+if ($LASTEXITCODE -ne 0) { throw 'Long-path update failed.' }
+$longCurrent = Get-Content -LiteralPath (Join-Path $longRoot 'app\current.json') -Raw | ConvertFrom-Json
+if ($longCurrent.sha256 -cne $second.sha256) { throw 'Long-path update selected another release.' }
+$longInstalled = Join-Path $longRoot ('app\versions\'+$second.revision+'-'+$second.sha256.Substring(0,12))
+& (Join-Path $longInstalled 'Bridge.cmd') help
+if ($LASTEXITCODE -ne 0) { throw 'Long-path installed startup verification failed.' }; $count++
 # A checksum-valid archive must still not escape its extraction directory.
 $channel=$metadata | ConvertFrom-Json
 $archivePath=Join-Path (Split-Path -Parent $source) $channel.archive
@@ -71,7 +81,9 @@ Copy-Item -LiteralPath $unsafeZip -Destination $archivePath -Force
 $channel.sha256=(Get-FileHash $unsafeZip).Hash.ToLowerInvariant()
 $channel | ConvertTo-Json | Set-Content -LiteralPath $source -Encoding UTF8
 Run-Update
-if ([IO.File]::ReadAllText($currentPath) -cne $secondBytes -or (Get-ChildItem -LiteralPath $trial -Recurse -Filter outside.txt)) { throw 'Unsafe archive escaped or activated.' }; $count++
+$nativeTrial = if ($trial.StartsWith('\\')) { '\\?\UNC\' + $trial.Substring(2) } else { '\\?\' + $trial }
+$escapedFiles = @([IO.Directory]::EnumerateFiles($nativeTrial, 'outside.txt', [IO.SearchOption]::AllDirectories))
+if ([IO.File]::ReadAllText($currentPath) -cne $secondBytes -or $escapedFiles.Count) { throw 'Unsafe archive escaped or activated.' }; $count++
 Copy-Item -LiteralPath ($archivePath+'.saved') -Destination $archivePath -Force
 # Simulate a corrupt release with a different digest so it cannot hit cache.
 $bad=$metadata | ConvertFrom-Json; $bad.sha256='0'*64

@@ -150,7 +150,7 @@ export class M365Backend {
         // A strict assistant-only DOM selector is mandatory. No document.body fallback.
         enter('response_validate');for(const candidate of state.candidates){
           try{parseEnvelope(candidate,request);success=true;return candidate;}
-          catch(error){if(error.code==='tool_loop_detected')throw error;lastError=error;}
+          catch(error){lastError=error;}
         }
         throw new BridgeError('m365_response_invalid','生成が終了しましたが、完全なJSON・要求ID・ツール引数を検証できません。回答の修復や再送はしません。',502,
           {validation_code:lastError?.code??'invalid_json'});

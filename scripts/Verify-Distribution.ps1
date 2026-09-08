@@ -18,24 +18,22 @@ foreach ($entry in $files) {
     $seen[$relative] = $true
     if ([string]$entry.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid manifest hash.' }
     $path = Join-Path $root $relative
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing distribution file: $relative" }
-    $item = Get-Item -LiteralPath $path
-    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Linked distribution files are not supported.' }
-    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $entry.sha256) { throw "Distribution hash mismatch: $relative" }
+    $nativePath = if ($path.StartsWith('\\')) { '\\?\UNC\' + $path.Substring(2) } else { '\\?\' + $path }
+    if (-not [IO.File]::Exists($nativePath)) { throw "Missing distribution file: $relative" }
+    if (([IO.File]::GetAttributes($nativePath) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Linked distribution files are not supported.' }
+    $stream = [IO.File]::OpenRead($nativePath)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try { $digest = ([BitConverter]::ToString($hasher.ComputeHash($stream))).Replace('-','').ToLowerInvariant() }
+    finally { $stream.Dispose(); $hasher.Dispose() }
+    if ($digest -cne $entry.sha256) { throw "Distribution hash mismatch: $relative" }
 }
 foreach ($required in @('runtime/node.exe','runtime/LICENSE','src/cli.mjs','src/desktop.mjs','src/run-log.mjs','src/model-selection.mjs','config/node-runtime.lock.json','prompts/m365-tool-router.md','scripts/Launch.ps1','scripts/Verify-Distribution.ps1','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd')) {
     if (-not $seen.ContainsKey($required)) { throw "Required manifest entry missing: $required" }
 }
 if ((Get-FileHash -LiteralPath (Join-Path $root 'runtime\node.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lock.executableSha256) { throw 'Bundled Node.js does not match the official pinned executable.' }
 
-if (-not $seen.ContainsKey('config/officecli-runtime.lock.json')) { throw 'OfficeCLI runtime contract missing.' }
-foreach($requiredPdf in @('src/pdf-cli.mjs','src/pdf-worker.mjs','src/pdf-process.mjs','src/pdf-output.mjs','runtime/liteparse/package-lock.json','runtime/liteparse/node_modules/@llamaindex/liteparse/dist/lib.js','runtime/liteparse/node_modules/@llamaindex/liteparse-win32-x64-msvc/pdfium.dll','runtime/liteparse/node_modules/@llamaindex/liteparse-win32-x64-msvc/liteparse.win32-x64-msvc.node')) {
-    if (-not $seen.ContainsKey($requiredPdf)) { throw "PDF runtime manifest entry missing: $requiredPdf" }
+foreach($requiredPython in @('src/pdf-cli.mjs','src/pdf-process.mjs','src/pdf-output.mjs','python/document_runtime.py','python/Office-Native.ps1','config/python-runtime.lock.json','runtime/python/python.exe','runtime/python/python313.dll','runtime/python/python313.zip','runtime/python/python313._pth','runtime/python/LICENSE.txt')) {
+    if(-not $seen.ContainsKey($requiredPython)){throw "Python runtime manifest entry missing: $requiredPython"}
 }
-$officeLock=Get-Content -LiteralPath (Join-Path $root 'config\officecli-runtime.lock.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-foreach($file in $officeLock.files) {
-    if ($file.name -cnotmatch '^[A-Za-z0-9.-]+$' -or $file.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid OfficeCLI runtime contract.' }
-    $relative='runtime/officecli/'+$file.name
-    if (-not $seen.ContainsKey($relative)) { throw "OfficeCLI manifest entry missing: $relative" }
-    if ((Get-FileHash -LiteralPath (Join-Path $root $relative) -Algorithm SHA256).Hash.ToLowerInvariant() -cne $file.sha256) { throw 'OfficeCLI does not match the pinned runtime.' }
-}
+$pythonLock=Get-Content -Raw -Encoding UTF8 (Join-Path $root 'config/python-runtime.lock.json') | ConvertFrom-Json
+if((Get-FileHash (Join-Path $root 'runtime/python/python.exe')).Hash.ToLowerInvariant() -cne $pythonLock.executableSha256){throw 'Bundled Python does not match the pinned executable'}

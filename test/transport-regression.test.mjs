@@ -79,22 +79,12 @@ test('final transport still enforces the requested JSON schema',()=>{
  assert.equal(parseEnvelope(`BRIDGE_FINAL ${r.requestId}\n{"title":"ok"}`,r).content,'{"title":"ok"}');
  assert.throws(()=>parseEnvelope(`BRIDGE_FINAL ${r.requestId}\n{"title":1}`,r),{code:'invalid_final_format'});
 });
-test('fourth terminal call is blocked for raw and legacy JSON transports',()=>{
- const r=request({messages:history(3)});
- assert.equal(r.toolBudget.terminalUsed,3);
- for(const raw of [rawTool(r),jsonTool(r)])assert.throws(()=>parseEnvelope(raw,r),{code:'tool_loop_detected'});
- assert.equal(parseEnvelope(`BRIDGE_FINAL ${r.requestId} No text extracted.`,r).action,'final');
-});
-test('thirteenth total tool call is blocked for both transports',()=>{
- const r=request({messages:history(12,'other_tool')});
- assert.equal(r.toolBudget.totalUsed,12);
- for(const raw of [rawTool(r,{name:'other_tool'}),jsonTool(r,'other_tool')])assert.throws(()=>parseEnvelope(raw,r),{code:'tool_loop_detected'});
-});
-test('third terminal call is allowed and an explicit new user turn resets the budget',()=>{
- const r=request({messages:history(2)});assert.equal(parseEnvelope(rawTool(r),r).action,'tool_calls');
- const fresh=request({messages:[...history(3),{role:'user',content:'new request'}]});
- assert.equal(fresh.toolBudget.totalUsed,0);assert.equal(fresh.toolBudget.terminalUsed,0);
- assert.equal(parseEnvelope(rawTool(fresh),fresh).action,'tool_calls');
+test('continued work is accepted beyond former terminal and total call limits',()=>{
+ for(const name of ['run_in_terminal','other_tool']){
+  const r=request({messages:history(50,name)});
+  assert.equal(Object.hasOwn(r,'toolBudget'),false);
+  for(const raw of [rawTool(r,{name}),jsonTool(r,name)])assert.equal(parseEnvelope(raw,r).action,'tool_calls');
+ }
 });
 
 test('fenced json-string arguments preserve exact whitespace, Windows paths and marker text',()=>{
@@ -163,4 +153,13 @@ test('final v2 requires an end marker without reinterpreting legacy final text',
  assert.equal(parseEnvelope(`BRIDGE_FINAL_V2 ${r.requestId}\nanswer\nEND_BRIDGE_FINAL_V2`,r).content,'answer');
  assert.throws(()=>parseEnvelope(`BRIDGE_FINAL_V2 ${r.requestId}\nanswer`,r),{code:'invalid_envelope'});
  assert.equal(parseEnvelope(`BRIDGE_FINAL ${r.requestId}\nanswer\nEND_BRIDGE_FINAL_V2`,r).content,'answer\nEND_BRIDGE_FINAL_V2');
+});
+
+test('final review preserves colons and nested Markdown inside a longer transport fence',()=>{
+ const r=request({tools:[]});
+ const body='問題点:\n名前付き引数は有効です。\n修正版:\n```vba\nMsgBox Prompt:="結果: " & n, Buttons:=vbInformation\nn = 1: Debug.Print n\n```\n補足: 終了です。';
+ const fence='`'.repeat(8);
+ assert.equal(parseEnvelope(`${fence}text\nBRIDGE_FINAL_V2 ${r.requestId}\n${body}\nEND_BRIDGE_FINAL_V2\n${fence}`,r).content,body);
+ assert.throws(()=>parseEnvelope(`${fence}text\nBRIDGE_FINAL_V2 ${r.requestId}\n${body}\n${fence}`,r));
+ assert.throws(()=>parseEnvelope(`${fence}text\nBRIDGE_FINAL_V2 00000000-0000-0000-0000-000000000000\n${body}\nEND_BRIDGE_FINAL_V2\n${fence}`,r));
 });
