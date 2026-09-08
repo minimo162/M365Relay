@@ -29,7 +29,7 @@ foreach ($required in @('runtime/node.exe','runtime/LICENSE','src/cli.mjs','src/
 if ((Get-FileHash -LiteralPath (Join-Path $root 'runtime\node.exe') -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lock.executableSha256) { throw 'Bundled Node.js does not match the official pinned executable.' }
 
 if (-not $seen.ContainsKey('config/officecli-runtime.lock.json')) { throw 'OfficeCLI runtime contract missing.' }
-foreach($requiredPdf in @('src/pdf-cli.mjs','runtime/liteparse/package-lock.json','runtime/liteparse/node_modules/@llamaindex/liteparse/dist/lib.js','runtime/liteparse/node_modules/@llamaindex/liteparse-win32-x64-msvc/pdfium.dll','runtime/liteparse/node_modules/@llamaindex/liteparse-win32-x64-msvc/liteparse.win32-x64-msvc.node')) {
+foreach($requiredPdf in @('src/pdf-cli.mjs','src/pdf-worker.mjs','src/pdf-process.mjs','src/pdf-output.mjs','runtime/liteparse/package-lock.json','runtime/liteparse/node_modules/@llamaindex/liteparse/dist/lib.js','runtime/liteparse/node_modules/@llamaindex/liteparse-win32-x64-msvc/pdfium.dll','runtime/liteparse/node_modules/@llamaindex/liteparse-win32-x64-msvc/liteparse.win32-x64-msvc.node')) {
     if (-not $seen.ContainsKey($requiredPdf)) { throw "PDF runtime manifest entry missing: $requiredPdf" }
 }
 $officeLock=Get-Content -LiteralPath (Join-Path $root 'config\officecli-runtime.lock.json') -Raw -Encoding UTF8 | ConvertFrom-Json
