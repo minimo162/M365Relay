@@ -124,15 +124,59 @@ def pdf_render(path, output, number, scale):
     return dict(output=str(Path(output).resolve()), page=number)
 
 
+def validate_xlsx_input(data):
+    import math
+    import re
+    if not isinstance(data, dict) or set(data) - {"sheet", "cells"} or "cells" not in data:
+        raise ValueError("Expected sheet and cells fields")
+    name = data.get("sheet", "Sheet1")
+    if not isinstance(name, str) or not name or len(name) > 31 or re.search(r"[\\/*?:\[\]]", name):
+        raise ValueError("Invalid sheet name")
+    if not isinstance(data["cells"], dict) or len(data["cells"]) > 100000:
+        raise ValueError("Invalid or oversized cells object")
+    for address, entry in data["cells"].items():
+        if not re.fullmatch(r"[A-Z]{1,3}[1-9]\d{0,6}", address):
+            raise ValueError("Expected uppercase single-cell addresses")
+        column = 0
+        for char in re.match(r"[A-Z]+", address).group():
+            column = column*26 + ord(char)-64
+        if column > 16384 or int(re.search(r"\d+", address).group()) > 1048576:
+            raise ValueError("Cell address outside Excel limits")
+        if isinstance(entry, dict):
+            if set(entry) not in ({"value"}, {"formula"}):
+                raise ValueError("Each cell must specify value OR formula, not both")
+            value = next(iter(entry.values()))
+            if "formula" in entry and (not isinstance(value, str) or not value or value.startswith("==") or not (value[1:] if value.startswith("=") else value).strip()):
+                raise ValueError("Invalid formula string")
+        else:
+            value = entry
+        if value is not None and not isinstance(value, (str, int, float, bool)):
+            raise ValueError("Unsupported cell value")
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError("Non-finite cell number")
+        if isinstance(value, str) and len(value.encode("utf-16-le"))//2 > 32767:
+            raise ValueError("Cell text exceeds Excel capacity; split it explicitly instead of truncating")
+    return data
+
+
 def xlsx_create(output, source):
+    if Path(source).stat().st_size > 32*1024*1024:
+        raise ValueError("Input JSON exceeds 32 MiB; use selected ranges")
+    def unique_fields(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate JSON field")
+            result[key] = value
+        return result
+    data = validate_xlsx_input(json.loads(Path(source).read_text(encoding="utf-8-sig"), object_pairs_hook=unique_fields))
     import openpyxl
-    data = json.loads(Path(source).read_text(encoding="utf-8-sig"))
     wb = openpyxl.Workbook()
     sheet = wb.active
     sheet.title = data.get("sheet", "Sheet1")
     for address, entry in data["cells"].items():
         if isinstance(entry, dict) and set(entry) == {"formula"}:
-            sheet[address] = "=" + entry["formula"].lstrip("=")
+            sheet[address] = entry["formula"] if entry["formula"].startswith("=") else "=" + entry["formula"]
         else:
             value = entry["value"] if isinstance(entry, dict) else entry
             sheet[address] = value

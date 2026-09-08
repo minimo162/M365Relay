@@ -57,5 +57,34 @@ class PublishTests(unittest.TestCase):
         self.assertTrue(link.is_symlink())
 
 
+class XlsxInputTests(unittest.TestCase):
+    def test_literal_formula_like_text_and_boundaries_are_retained(self):
+        data = {"cells": {"A1": {"value": "=SUM(B1:B2)"}, "A2": "00123", "B1": "x"*32767,
+                          "XFD1048576": {"formula": "=SUM(B2:B3)"}}}
+        self.assertEqual(runtime.validate_xlsx_input(data), data)
+
+    def test_long_text_is_rejected_instead_of_openpyxl_truncation(self):
+        for value in ("x"*32768, "😀"*16384):
+            with self.assertRaises(ValueError):
+                runtime.validate_xlsx_input({"cells": {"A1": value}})
+
+    def test_ambiguous_and_unsupported_cells_are_rejected(self):
+        for entry in ({"value": "original", "formula": "1+1"}, {"value": "a", "typo": True},
+                      ["a", "b"], float("nan"), {"formula": "==1+1"}, {"formula": "= "}):
+            with self.assertRaises(ValueError):
+                runtime.validate_xlsx_input({"cells": {"A1": entry}})
+        for address in ("A1:B2", "XFE1", "A1048577", "A01"):
+            with self.assertRaises(ValueError):
+                runtime.validate_xlsx_input({"cells": {address: "data"}})
+
+    def test_duplicate_json_is_rejected_before_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, target = Path(folder)/"data.json", Path(folder)/"result.xlsx"
+            source.write_text('{"cells":{"A1":"first","A1":"second"}}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Duplicate"):
+                runtime.xlsx_create(target, source)
+            self.assertFalse(target.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
