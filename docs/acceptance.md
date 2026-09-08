@@ -8,6 +8,20 @@
 
 全体の実用化目標は未完了です。[公開チェックポイント](https://github.com/minimo162/M365Relay/issues/4)と関連Issueに実測条件を記録しています。
 
+## 証拠の分類（2026-09-09）
+
+| 区分 | 現在の証拠 | 状態 |
+| --- | --- | --- |
+| コード | Draft PR [#36](https://github.com/minimo162/M365Relay/pull/36)、`codex/transport-integrity` | 実装済み・未マージ |
+| 自動テスト | `npm test` 203/203、`npm run check` | PASS |
+| Windows配布 | `Test-Distribution.ps1` 11件、同梱Node/Python/PDF/Excel/Pillow | PASS |
+| 実M365/CDP | 合成・ファイル操作なし要求6回、全HTTP 200・識別文字列保持 | 限定確認 |
+| 実VS Code＋実M365 | 合成D課題、217 bytes・SHA-256・CRLF・読み戻し・画面表示 | PASS |
+| CI | PR CI 34288449023（browser、Ubuntu/Windows、distribution） | PASS |
+| 公開・配布 | 公開v0.2.31、0.2.32候補ZIPはローカルのみ | 未公開 |
+
+「PASS」はその行の範囲だけを示します。実M365の限定確認や自動テストを、会社端末・任意文書・通常256,000条件の一般保証へ拡張しません。
+
 | 項目 | 確認範囲 | 残件 |
 | --- | --- | --- |
 | A 入口 | 新規専用VS Codeプロファイルのモデル準備と初回応答を確認。送信なし診断でEdge所有・M365ページ観測・モデル未確認を区別。 | M365の新規認証、会社端末・別の利用者での確認 |
