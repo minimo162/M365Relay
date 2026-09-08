@@ -59,6 +59,16 @@ $second=Get-Content $currentPath -Raw | ConvertFrom-Json
 if ($first.revision -eq $second.revision) { throw 'Update did not activate a new revision.' }; $count++
 $secondBytes=[IO.File]::ReadAllText($currentPath)
 $metadata=[IO.File]::ReadAllText($source)
+# Test the new release in a deeper cache without requiring the old release's
+# startup verifier to support this newly fixed path length.
+$longRoot = Join-Path $trial 'Local user with long installation directory'
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'launcher\Update.ps1') -Source $source -LocalRoot $longRoot -SyncOnly
+if ($LASTEXITCODE -ne 0) { throw 'Long-path update failed.' }
+$longCurrent = Get-Content -LiteralPath (Join-Path $longRoot 'app\current.json') -Raw | ConvertFrom-Json
+if ($longCurrent.sha256 -cne $second.sha256) { throw 'Long-path update selected another release.' }
+$longInstalled = Join-Path $longRoot ('app\versions\'+$second.revision+'-'+$second.sha256.Substring(0,12))
+& (Join-Path $longInstalled 'Bridge.cmd') help
+if ($LASTEXITCODE -ne 0) { throw 'Long-path installed startup verification failed.' }; $count++
 # A checksum-valid archive must still not escape its extraction directory.
 $channel=$metadata | ConvertFrom-Json
 $archivePath=Join-Path (Split-Path -Parent $source) $channel.archive

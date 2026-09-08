@@ -71,12 +71,12 @@ function Expand-CheckedZip([string]$ZipPath, [string]$Destination) {
         foreach ($entry in $zip.Entries) {
             $target = [IO.Path]::GetFullPath((Join-Path $Destination $entry.FullName))
             if (-not $target.StartsWith($Destination.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Archive path escaped staging.' }
-            if ($entry.FullName.EndsWith('/')) { New-Item -ItemType Directory -Force -Path $target | Out-Null }
+            $nativeTarget = if ($target.StartsWith('\\')) { '\\?\UNC\' + $target.Substring(2) } else { '\\?\' + $target }
+            if ($entry.FullName.EndsWith('/')) { [IO.Directory]::CreateDirectory($nativeTarget) | Out-Null }
             else {
-                New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($target)) | Out-Null
+                [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($nativeTarget)) | Out-Null
                 # .NET Framework ZIP extraction uses legacy MAX_PATH unless the
                 # already-normalized, scope-checked path uses extended syntax.
-                $nativeTarget = if ($target.StartsWith('\\')) { '\\?\UNC\' + $target.Substring(2) } else { '\\?\' + $target }
                 [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $nativeTarget, $false)
             }
         }
