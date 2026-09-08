@@ -13,7 +13,7 @@ test('first-run setup creates an isolated usable model without modifying a norma
  assert.equal(plan.userDataDir,await realpath(join(c.home,'vscode-data')));
  const groups=JSON.parse(await readFile(join(plan.userDataDir,'User','chatLanguageModels.json'),'utf8'));
  const m=groups[0].models[0];assert.equal(m.requestHeaders.Authorization,'Bearer '+c.token);
- assert.equal(m.maxInputTokens,28000);assert.equal(m.maxOutputTokens,8000);
+ assert.equal(m.maxInputTokens,256000);assert.equal(m.maxOutputTokens,8000);
  assert.equal(m.vision,true);
  assert.equal(m.url,'http://127.0.0.1:8731/v1/chat/completions');assert.equal(groups[0].apiKey,undefined);
  const settings=JSON.parse(await readFile(join(plan.userDataDir,'User','settings.json'),'utf8'));

@@ -11,7 +11,7 @@
         "url": "http://127.0.0.1:8731/v1/chat/completions",
         "toolCalling": true,
         "vision": true,
-        "maxInputTokens": 28000,
+        "maxInputTokens": 256000,
         "maxOutputTokens": 8000
       }
     ]

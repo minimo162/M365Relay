@@ -20,7 +20,7 @@ export async function attachRequestImages({browser,sessionId,config,images,signa
  try{
   const paths=[];
   for(const image of images){
-   assert(/^(?:image-[1-4]-[0-9a-f]{12}\.(?:png|jpg)|relay-tools-[0-9a-f]{12}\.txt)$/.test(image.fileName),'invalid_image_name','添付名が不正です。');
+   assert(/^(?:image-[1-4]-[0-9a-f]{12}\.(?:png|jpg)|relay-(?:tools|context)-[0-9a-f]{12}\.txt)$/.test(image.fileName),'invalid_image_name','添付名が不正です。');
    const path=join(directory,image.fileName);await writeFile(path,image.bytes,{flag:'wx',mode:0o600});written.push(path);paths.push(await realpath(path));
   }
   const check=async()=>{

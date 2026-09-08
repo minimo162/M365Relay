@@ -31,7 +31,7 @@ async function openEdge(config){
 async function writeVscodeExample(config){
   const v=[{name:'M365Relay',vendor:'customendpoint',apiKey:'${input:m365BridgeKey}',apiType:'chat-completions',
     models:[{id:'m365-copilot-ui',name:'M365 Copilot (M365Relay)',url:`http://127.0.0.1:${config.port}/v1/chat/completions`,
-      toolCalling:true,vision:true,maxInputTokens:28000,maxOutputTokens:8000}]}];
+      toolCalling:true,vision:true,maxInputTokens:256000,maxOutputTokens:8000}]}];
   const p=join(config.home,'chatLanguageModels.example.json');await writeFile(p,JSON.stringify(v,null,2)+'\n',{mode:0o600});return p;
 }
 async function main(){
@@ -40,7 +40,7 @@ async function main(){
   const command=process.argv[2]??'help';
   if(command==='help'){console.log('Commands: run [workspace] | setup | init | open | diagnose | serve | recover-lock\nConfig/data: '+homePath());return;}
   if(command==='recover-lock'){await recoverProcessLock(homePath());console.log('停止済みプロセスの起動ロックを削除しました。要求台帳は保持しています。');return;}
-  const config={...await loadConfig(),allowImages:true,attachToolDefinitions:true};
+  const config={...await loadConfig(),allowImages:true,attachToolDefinitions:true,attachConversation:true};
   let desktop;
   if(command==='setup'){
     assert(process.platform==='win32','windows_required','Run.cmdはWindows用です。');

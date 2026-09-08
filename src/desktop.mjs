@@ -70,7 +70,7 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
   assert(models.every(isObject)&&models.filter(m=>m.id==='m365-copilot-ui').length<=1,'desktop_model_conflict','専用VS Codeのモデル定義が重複しています。');
   const prior=models.find(m=>m.id==='m365-copilot-ui')??{};
   const model={...prior,id:'m365-copilot-ui',name:'M365Relay',apiType:'chat-completions',url:`http://127.0.0.1:${config.port}/v1/chat/completions`,
-   toolCalling:true,vision:true,maxInputTokens:28000,maxOutputTokens:8000,
+   toolCalling:true,vision:true,maxInputTokens:256000,maxOutputTokens:8000,
    requestHeaders:{...prior.requestHeaders,Authorization:`Bearer ${config.token}`}};
   const group={...old,name:groupName,vendor:'customendpoint',apiType:'chat-completions',models:[...models.filter(m=>m.id!==model.id),model]};
   // apiKey needs a VS Code secret-storage reference; never write a placeholder
