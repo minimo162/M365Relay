@@ -155,7 +155,9 @@ export class M365Backend {
           catch(error){lastError=error;}
         }
         throw new BridgeError('m365_response_invalid','生成が終了しましたが、完全なJSON・要求ID・ツール引数を検証できません。回答の修復や再送はしません。',502,
-          {validation_code:lastError?.code??'invalid_json'});
+          {validation_code:lastError?.code??'invalid_json',response_snapshots:snapshots,
+            first_reply_observed_ms:firstReplyMs===null?null:Math.round(firstReplyMs),
+            last_reply_change_observed_ms:lastReplyChangeMs===null?null:Math.round(lastReplyChangeMs)});
       }
     } catch(error) {
       failure=error instanceof BridgeError || error?.name==='AbortError' || error?.name==='TimeoutError' ? error : internalFailure(error);

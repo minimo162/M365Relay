@@ -190,7 +190,9 @@ test('mock DOM: dropped input does not trigger reinsertion or send',async()=>{
   const f=fixture({dropInput:true});await assert.rejects(execute(f),{code:'input_mismatch'});assert.equal(f.state.sent,0);assert.equal(f.events.filter(x=>x==='Input.insertText').length,1);
 });
 test('mock DOM: invalid completed reply is not repaired or resent',async()=>{
-  const f=fixture({wrongReply:true});await assert.rejects(execute(f),{code:'m365_response_invalid'});assert.equal(f.state.sent,1);assert.deepEqual(f.state.closed,[]);
+  const f=fixture({wrongReply:true});await assert.rejects(execute(f),error=>{
+    assert.equal(error.code,'m365_response_invalid');assert(error.details.response_snapshots>=1);assert.equal(typeof error.details.validation_code,'string');return true;
+  });assert.equal(f.state.sent,1);assert.deepEqual(f.state.closed,[]);
 });
 test('mock DOM: lost send acknowledgement never produces a second click',async()=>{
   const f=fixture({loseSend:true});await assert.rejects(execute(f),{code:'m365_dom_changed'});assert.equal(f.state.sent,1);
