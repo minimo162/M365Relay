@@ -138,7 +138,7 @@ BRIDGE_FINAL_V2 ${requestId}
 END_BRIDGE_FINAL_V2
 ${outerFence}
 response_formatがJSONを要求する場合も、そのJSONをこの2行の間に入れます。JSONだけの裸の応答や、要求IDを省いた外枠は受け取れません。ツール依頼の場合は添付のBRIDGE_TOOL形式と同じ要求IDを使います。`;
-  const documentReminder=runtimeGuidance(messages)?'文書作業の実行方法: PDF全ページを読む場合はpdf-read input.pdfとし、未確認のページ数を1-999などと推測しないでください。Pythonコードはファイル作成ツールで.pyとして保存し、同梱Pythonで実行します。原本の文字列を直接読んでjson.dump等で保存し、JSONやコードをPowerShellのhere-stringへ埋め込まないでください。実行が失敗した場合はその出力を確認してから次へ進みます。画像による確認を依頼された場合は画像ツールで実際に開いてから最終回答します。上記の通信外枠は維持してください。':'';
+  const documentReminder=runtimeGuidance(messages)?'文書作業の実行方法: PDF全ページをJSONへ保存する場合はpdf-read input.pdf output.jsonとし、未確認のページ数を1-999などと推測しないでください。Pythonコードはファイル作成ツールで.pyとして保存し、同梱Pythonで実行します。原本の文字列を直接読んでjson.dump等で保存し、JSONやコードをPowerShellのhere-stringへ埋め込まないでください。実行が失敗した場合はその出力を確認してから次へ進みます。画像による確認を依頼された場合は画像ツールで実際に開いてから最終回答します。上記の通信外枠は維持してください。':'';
   const prompt = `${template}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${serialized}\nEND_BRIDGE_REQUEST_JSON\n${transportReminder}\n${finalFrame}\n${documentReminder}\n`;
   const promptLimit=Math.min(maxPromptChars,120000);
   if(prompt.length>promptLimit)throw new BridgeError('context_too_large', '会話とツール定義が入力上限を超えました。会話を圧縮するか、選択ツールを減らしてください。本文は切り捨てず、M365への送信前に停止しました。', 413,

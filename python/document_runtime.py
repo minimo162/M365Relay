@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 from contextlib import closing
 
 
-def emit(value):
+def encode_result(value):
     import datetime
     def serialise(item):
         if isinstance(item, (datetime.datetime, datetime.date, datetime.time)):
@@ -20,7 +20,11 @@ def emit(value):
     data = json.dumps(value, ensure_ascii=True, allow_nan=False, default=serialise)
     if len(data.encode("utf-8")) > 32 * 1024 * 1024:
         raise ValueError("Document output exceeds 32 MiB; select fewer pages")
-    print(data)
+    return data
+
+
+def emit(value):
+    print(encode_result(value))
 
 
 def publish(path, writer):
@@ -298,7 +302,7 @@ def office_native(operation, source, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("pdf-read"); p.add_argument("input"); p.add_argument("--pages")
+    p = sub.add_parser("pdf-read"); p.add_argument("input"); p.add_argument("output", nargs="?"); p.add_argument("--pages")
     p = sub.add_parser("pdf-render"); p.add_argument("input"); p.add_argument("output"); p.add_argument("--page", type=int, default=1); p.add_argument("--scale", type=float, default=1.5)
     p = sub.add_parser("xlsx-create"); p.add_argument("output"); p.add_argument("data")
     for command in ("xlsx-read", "office-text"):
@@ -306,7 +310,15 @@ def main():
     for command in ("office-pdf", "xlsx-recalculate", "docx-create", "pptx-create"):
         p = sub.add_parser(command); p.add_argument("input"); p.add_argument("output")
     a = parser.parse_args()
-    if a.command == "pdf-read": result = pdf_read(a.input, a.pages)
+    if a.command == "pdf-read":
+        result = pdf_read(a.input, a.pages)
+        if a.output:
+            data = encode_result(result)
+            publish(a.output, lambda target: target.write_text(data + "\n", encoding="utf-8"))
+            result = dict(output=str(Path(a.output).resolve()), totalPages=result["totalPages"],
+                          parsedPageNumbers=result["parsedPageNumbers"],
+                          pagesWithoutText=result["pagesWithoutText"],
+                          selectionComplete=result["selectionComplete"])
     elif a.command == "pdf-render": result = pdf_render(a.input, a.output, a.page, a.scale)
     elif a.command == "xlsx-create": result = xlsx_create(a.output, a.data)
     elif a.command == "xlsx-read": result = xlsx_read(a.input)
