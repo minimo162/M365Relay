@@ -31,14 +31,7 @@ def publish(path, writer):
     with tempfile.TemporaryDirectory(prefix=".relay-", dir=path.parent) as temp:
         staged = Path(temp) / path.name
         writer(staged)
-        with staged.open("rb") as source, path.open("xb") as target:
-            try:
-                import shutil
-                shutil.copyfileobj(source, target)
-            except BaseException:
-                target.close()
-                path.unlink()
-                raise
+        os.link(staged, path)
 
 
 def selected_pages(spec, total):
@@ -104,13 +97,24 @@ def pdf_render(path, output, number, scale):
                 w, h = page.get_size()
                 if w*h*scale*scale > 40_000_000:
                     raise ValueError("Rendered image too large")
-                bitmap = page.render(scale=scale)
+                bitmap = page.render(scale=scale, force_bitmap_format=pdfium.raw.FPDFBitmap_BGRA)
                 try:
-                    image = bitmap.to_pil()
-                    try:
-                        image.save(target, format="PNG")
-                    finally:
-                        image.close()
+                    # PDFium already renders pixels. PNG needs only stdlib
+                    # zlib/CRC encoding; no separate image codec DLLs.
+                    import struct
+                    import zlib
+                    compressor = zlib.compressobj()
+                    compressed = []
+                    pixels = bytes(bitmap.buffer)
+                    for row in range(bitmap.height):
+                        bgra = pixels[row*bitmap.stride:row*bitmap.stride+bitmap.width*4]
+                        rgba = bytearray(len(bgra))
+                        rgba[0::4], rgba[1::4], rgba[2::4], rgba[3::4] = bgra[2::4], bgra[1::4], bgra[0::4], bgra[3::4]
+                        compressed.append(compressor.compress(b"\0" + rgba))
+                    compressed.append(compressor.flush())
+                    def chunk(kind, data):
+                        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind+data))
+                    target.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", bitmap.width, bitmap.height, 8, 6, 0, 0, 0)) + chunk(b"IDAT", b"".join(compressed)) + chunk(b"IEND", b""))
                 finally:
                     bitmap.close()
     publish(output, write)

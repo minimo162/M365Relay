@@ -25,16 +25,15 @@ installer and user/global packages are not included.
 The exact Python.org archive and PyPI wheels, versions and SHA-256 hashes are in
 config/python-runtime.lock.json. Each wheel retains its dist-info metadata and
 license files in runtime/python/Lib/site-packages. PDFium notices remain under
-pypdfium2_raw. Native components are PDFium and Pillow codecs/font support as
+pypdfium2_raw. Native components are PDFium as
 well as Python's standard runtime DLLs. These still require company approval.
 
 Included packages: openpyxl (MIT), et_xmlfile (MIT), pypdf (BSD-3-Clause),
 pypdfium2 (Apache-2.0/BSD-3-Clause; see its bundled notices for PDFium and its
-dependencies), Pillow (HPND and bundled third-party notices).
+dependencies).
 
-The optional Pillow AVIF native codec is omitted to save about 8 MB. Its plugin
-handles the missing codec as unsupported; PNG/JPEG and PDF raster output are
-verified. Upstream license notices are retained. Console entry-point scripts
+PNG output uses Python's standard zlib/struct on PDFium-rendered pixels.
+Pillow and its native image codecs are not bundled. Console entry-point scripts
 from wheel .data/scripts are not installed; the app uses library APIs.
 
 OfficeCLI and LiteParse are not included in this distribution. Historical

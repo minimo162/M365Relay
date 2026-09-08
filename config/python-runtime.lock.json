@@ -24,14 +24,6 @@
       "license": "MIT"
     },
     {
-      "name": "pillow",
-      "version": "12.3.0",
-      "file": "pillow-12.3.0-cp313-cp313-win_amd64.whl",
-      "url": "https://files.pythonhosted.org/packages/a6/9b/7a58e61d62be561da3a356fe2384d4059a6345fc130e23ef1c36a5b81d24/pillow-12.3.0-cp313-cp313-win_amd64.whl",
-      "sha256": "1cca606cd25738df4ed873d5ad46bbdb3d83b5cbca291f6b4ff13a4df6b0bbe8",
-      "license": "MIT-CMU"
-    },
-    {
       "name": "pypdf",
       "version": "6.18.0",
       "file": "pypdf-6.18.0-py3-none-any.whl",

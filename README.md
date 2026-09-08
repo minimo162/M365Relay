@@ -52,7 +52,7 @@ Copilot側は、新しい会話を開くたびに`GPT 5.6 Think Deeper`を画面
 接続キーのコピーやJSON編集は不要です。通常のVS Code設定は変更せず、M365Relay専用のユーザーデータを使います。
 専用VS Codeではワークスペース信頼を無効化して起動します。この専用環境で開くすべてのフォルダーが対象で、Restricted Modeによる制限はありません。エージェントの操作承認設定は変更しません。
 専用端末では`M365_RELAY_NODE`が本体に含まれるNode.jsを指します。PowerShellからは`& $env:M365_RELAY_NODE script.mjs`で利用でき、PC全体のPATH変更は不要です。
-文書処理には小型のPython 3.13.15とopenpyxl・pypdf・pypdfium2・Pillowを同梱します。pipや別のPythonのインストールは不要です。`& $env:M365_RELAY_PYTHON -I -B $env:M365_RELAY_DOCUMENTS --help`で文書コマンドを確認できます。OfficeCLIとLiteParseは配布に含めません。
+文書処理には小型のPython 3.13.15とopenpyxl・pypdf・pypdfium2を同梱します。pipや別のPythonのインストールは不要です。`& $env:M365_RELAY_PYTHON -I -B $env:M365_RELAY_DOCUMENTS --help`で文書コマンドを確認できます。OfficeCLIとLiteParseは配布に含めません。
 文字PDFは`& $env:M365_RELAY_NODE $env:M365_RELAY_PDF input.pdf output.json "1-5,8"`でページ・文字座標・抽出テキストを新規JSONへ保存します。ページ範囲は省略可能です。PythonからPDF→PNGの描画も可能です。OCRは含みません。Excelの作成/読取はopenpyxl、数式再計算とOffice→PDF、Word/PowerPointの作成はインストール済みデスクトップ版Officeを利用します。
 解析結果の`selectionComplete`は指定ページが揃ったかを示し、文字認識や表の正確性の保証ではありません。文字が取れなかったページは`pagesWithoutText`と警告に明示します。空白ページとスキャンページはこの検査だけでは区別しません。
 モデル選択にAutoしか表示されない場合は、Manage Modelsを一度開いてからM365Relayを選びます。

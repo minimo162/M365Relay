@@ -2,6 +2,8 @@
 param([ValidateSet('office-pdf','xlsx-recalculate','docx-create','pptx-create','cleanup')][string]$Operation,
       [string]$InputPath,[string]$OutputPath,[string]$StatePath)
 $ErrorActionPreference='Stop'
+[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+$OutputEncoding=[Console]::OutputEncoding
 if($Operation -eq 'cleanup') {
     if(Test-Path -LiteralPath $StatePath) {
         $state=Get-Content -Raw -Encoding UTF8 -LiteralPath $StatePath | ConvertFrom-Json

@@ -8,17 +8,17 @@
 - openpyxl 3.1.5 / et_xmlfile 2.0.0: Excel作成・読取。
 - pypdf 6.18.0: PDFの分割・結合などのPython API。
 - pypdfium2 5.13.0: PDF文字と座標、ページ描画。
-- Pillow 12.3.0: PNG/JPEGなどの画像処理。任意のAVIFコーデック約8MBは除外。
+- PNG出力: Python標準のzlib/structで符号化する。PDFiumが描画した画素を使うため、Pillowや別の画像コーデックDLLは不要。
 
 pip、Tcl/Tk、pandas、NumPy、OCRエンジン、OfficeCLI、LiteParseは入れない。Python標準ランタイムは削らず、`_pth`で同梱パッケージのみを参照する。実行は`-I -B`を使う。ライブラリのバージョン・公式配布URL・SHA256はconfig/python-runtime.lock.jsonに記録し、wheelのライセンスとdist-infoを保持する。ライブラリ導入にpipやsetup.pyの実行は不要で、固定wheelをビルド時に展開する。
 
-Python本体と5パッケージは展開後38,703,365 bytes（約36.9MiB、初期実測）。配布全体はNode等を含むため別に測る。AVIF以外の追加削除で標準ライブラリを壊す削減は行わない。
+Python本体と4パッケージは展開後31,835,839 bytes（約30.4MiB）。配布全体はNode等を含むため別に測る。初期候補からPillowを外し、標準PNG符号化へ変更。旧Pillow出力との画素一致も確認した。Python標準ライブラリは維持する。
 
 ## Officeの扱い
 
 openpyxlは数式を保存するが計算しない。数式の再計算・Officeと同じ描画・Word/PowerPointの作成は、端末にあるデスクトップ版Microsoft OfficeをWindows PowerShell COMで利用する。Office自体、pywin32、lxmlは同梱しない。
 
-この端末ではpython-docx/python-pptxの依存lxml DLLがWindowsのアプリ制御に拒否されたため、採用を取りやめた。制御は解除していない。PDFium/Pillowの必要なモジュールはこの端末で読み込めたが、これだけで会社の承認済みとは判断しない。ネイティブDLLは残るのでTHIRD_PARTY.mdと固定依存一覧を社内確認に使用する。
+この端末ではpython-docx/python-pptxの依存lxml DLLがWindowsのアプリ制御に拒否されたため、採用を取りやめた。制御は解除していない。PDFiumの必要なモジュールはこの端末で読み込めたが、これだけで会社の承認済みとは判断しない。ネイティブDLLは残るのでTHIRD_PARTY.mdと固定依存一覧を社内確認に使用する。
 
 Officeヘルパーは新しい出力のみを生成し、入力は読取専用で開く。自分で起動したOfficeのPIDと開始時刻を記録して終了処理を限定する。既存のOfficeプロセスが再利用された場合は停止する。PowerPointが既に起動している場合などにこの制約へ当たり得る。Officeのない端末でもPDF処理とExcelファイルの読書きは利用できるが、数式再計算・Office描画・Word/PowerPoint作成は使用できない。
 
