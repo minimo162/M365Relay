@@ -84,7 +84,7 @@ export function browserOperation(origin,selectors,operation,args={}) {
             const lines=[...box.querySelectorAll('[data-line-index]')];
             if(!lines.length||lines.some((line,index)=>line.getAttribute('data-line-index')!==String(index)))continue;
             const body=lines.map(line=>line.textContent??'').join('\n');
-            const head=/^BRIDGE_(TOOL|FINAL_V2)\s+[a-f0-9-]{36}(?:\s|$)/i.exec(body);
+            const head=/^BRIDGE_(TOOL|FINAL_V2|FINAL_JSON)\s+[a-f0-9-]{36}(?:\s|$)/i.exec(body);
             if(!head)continue;
             // Scriptor may append blank indexed rows (NBSP placeholders). They
             // are outside the terminal marker, not part of an argument value.

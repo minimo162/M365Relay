@@ -253,3 +253,13 @@ test('editor replacement at end of attachment still receives the full stability 
  await backend.complete(request,{signal:AbortSignal.timeout(2000),onBeforeSend:async()=>{}});
  assert(insertedAt-attachmentFinished>=40);assert.equal(f.state.sent,1);
 });
+
+test('Scriptor final JSON keeps encoded newlines and rejects trailing fence fragments',()=>{
+ const id='11111111-1111-4111-8111-111111111111',rows=[`BRIDGE_FINAL_JSON ${id}`,JSON.stringify('レビュー:\n```vba\nx = 1: Debug.Print x\n```'),'END_BRIDGE_FINAL_JSON'];
+ const f=fixture({oldReply:'Plain Text '+rows.join('')});
+ const box={querySelectorAll:()=>rows.map((textContent,i)=>({textContent,getAttribute:()=>String(i)}))};
+ f.reply.querySelectorAll=s=>s.startsWith('[data-virtualized')?[box]:[];
+ const snapshot=()=>vm.runInContext(`(${browserOperation.toString()})(${JSON.stringify(config.origin)},${JSON.stringify(config.selectors)},'snapshot',{})`,f.context);
+ assert.equal(snapshot().candidates[0],rows.join('\n'));
+ rows.push('``');assert.equal(snapshot().candidates.length,0);
+});
