@@ -361,6 +361,7 @@ def main():
             data = encode_result(result)
             publish(a.output, lambda target: target.write_text(data + "\n", encoding="utf-8"))
             result = dict(output=str(Path(a.output).resolve()), totalPages=result["totalPages"],
+                          sourceFile=result["sourceFile"], documentComplete=result["documentComplete"],
                           parsedPageNumbers=result["parsedPageNumbers"],
                           pagesWithoutText=result["pagesWithoutText"],
                           selectionComplete=result["selectionComplete"])
