@@ -24,6 +24,13 @@ test('large history moves losslessly to TXT, retaining roles, call links and lit
 test('oversize context fails before upload without silently losing old history',()=>{
  assert.throws(()=>prepareRequest({model:MODEL,messages:[{role:'user',content:'x'.repeat(4*1024*1024)}]},template,{attachConversation:true}),{code:'context_attachment_too_large'});
 });
+test('current user request has reserved space even with large startup instructions',()=>{
+ const current='Current task: preserve source and verify the result.';
+ const r=prepareRequest({model:MODEL,messages:[{role:'system',content:'s'.repeat(24000)},{role:'developer',content:'d'.repeat(24000)},{role:'user',content:current}]},template,{attachConversation:true});
+ const wire=JSON.parse(r.prompt.split('BRIDGE_REQUEST_JSON:\n')[1].split('\nEND_BRIDGE_REQUEST_JSON')[0]);
+ assert.equal(wire.active_message_index.find(m=>m.index===2).message.content,current);
+ assert(r.prompt.length<60000);
+});
 test('attached history supports more than 512 messages with a finite request cap',()=>{
  const body={model:MODEL,messages:Array.from({length:700},(_,i)=>({role:i%2?'assistant':'user',content:`entry ${i}`}))};
  const r=prepareRequest(body,template,{attachConversation:true});

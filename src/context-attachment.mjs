@@ -51,12 +51,15 @@ export function prepareContextAttachment(payload,{maxBytes=4*1024*1024}={}){
  const sha256=createHash('sha256').update(bytes).digest('hex'),fileName=`relay-context-${sha256.slice(0,12)}.txt`;
  let latestUser=-1;for(let i=payload.messages.length-1;i>=0;i--)if(payload.messages[i].role==='user'){latestUser=i;break;}
  const selected=new Set([latestUser,...payload.messages.map((m,i)=>['system','developer'].includes(m.role)?i:-1),...payload.messages.map((_,i)=>i).slice(-4)].filter(i=>i>=0));
- let inlineRemaining=48000;
+ const latestSize=latestUser<0?0:JSON.stringify(payload.messages[latestUser]).length;
+ const reservedLatest=latestSize<=32000?latestSize:0;
+ let inlineRemaining=48000-reservedLatest;
  const messages=[...selected].sort((a,b)=>a-b).map(index=>{
   const message=payload.messages[index];
   const serialized=JSON.stringify(message);
   // An excerpt is an index entry, not a substitute for tool output or instructions.
-  const limit=index===latestUser?12000:['system','developer'].includes(message.role)?32000:2000;
+  if(index===latestUser&&reservedLatest)return {index,complete:true,message};
+  const limit=['system','developer'].includes(message.role)?32000:2000;
   if(serialized.length<=limit&&serialized.length<=inlineRemaining){inlineRemaining-=serialized.length;return {index,complete:true,message};}
   return {index,complete:false,role:message.role,tool_call_id:message.tool_call_id,original_chars:serialized.length,
       reference:{fileName,message_index:index},preview:serialized.slice(0,700),preview_is_not_complete:true};
