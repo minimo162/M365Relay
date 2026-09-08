@@ -3,13 +3,22 @@ import {assert} from './errors.mjs';
 
 const textOf=m=>typeof m.content==='string'?m.content:Array.isArray(m.content)?m.content.filter(p=>p.type==='text').map(p=>p.text).join('\n'):'';
 const ignored=new Set('the and with from this that tool result file text data read next context please use for not will only current instruction instructions'.split(' '));
+const ignoredJapanese=new Set('これ それ 今回 現在 内容 確認 作業 結果 ファイル 情報 必要 実行 ください ます です する した して ある ない こと もの どこ いつ について 教え'.split(' '));
+const japanese=/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+const segmenter=new Intl.Segmenter('ja',{granularity:'word'});
+const escapePattern=text=>text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 // Bounded lexical retrieval, never a replacement for the complete snapshot.
 export function selectContextEvidence(messages,fileName){
  const user=messages.findLast(m=>m.role==='user');
  const query=[user,...messages.filter(m=>m.role==='assistant').slice(-2)].filter(Boolean).map(textOf).map(s=>s.slice(0,2000)+'\n'+s.slice(-2000)).join('\n');
- const terms=[...new Set((query.match(/[A-Za-z][A-Za-z0-9_]{2,63}/g)??[]).map(s=>s.toLowerCase()).filter(s=>!ignored.has(s)))].slice(0,48);
- if(!terms.length)return [];
- const pattern=new RegExp('\\b(?:'+terms.join('|')+')\\b','gi');
+ const jpTerms=japanese.test(query)?[...new Set([...segmenter.segment(query)].filter(s=>s.isWordLike&&s.segment.length>=2&&s.segment.length<=64&&japanese.test(s.segment)&&!ignoredJapanese.has(s.segment)).map(s=>s.segment.toLowerCase()))].slice(0,24):[];
+ // Reserve room for Japanese task words even when VS Code prepends English
+ // reminders. ASCII word boundaries must not be applied to Japanese words.
+ const terms=[...new Set((query.match(/[A-Za-z][A-Za-z0-9_]{2,63}/g)??[]).map(s=>s.toLowerCase()).filter(s=>!ignored.has(s)))].slice(0,48-jpTerms.length);
+ const jpPatterns=jpTerms.flatMap(term=>[escapePattern(term),escapePattern(term.replace(/[^\x00-\x7f]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0')))]);
+ const patterns=[...(terms.length?['\\b(?:'+terms.join('|')+')\\b']:[]),...jpPatterns];
+ if(!patterns.length)return [];
+ const pattern=new RegExp(patterns.join('|'),'gi');
  const hits=[];
  for(const [index,message] of messages.entries()){
   if(message.role!=='tool')continue;
