@@ -27,9 +27,11 @@ export async function existingDesktopPlan(config,{workspace,fetchImpl=fetch,aliv
  assert(isObject(instance)&&isObject(owner)&&instance.version===1&&Number.isInteger(instance.pid)&&instance.pid>0&&instance.pid===owner.pid&&instance.started===owner.started&&Number.isFinite(Date.parse(owner.started))&&isObject(instance.plan),'instance_unverifiable','起動済みの情報を確認できません。',409);
  try{alive(instance.pid);}catch{throw new BridgeError('instance_unverifiable','起動済みのプロセスを確認できません。Recover.cmdで復旧してください。',409);}
  const nonce=randomBytes(32).toString('hex');
+ const port=instance.plan.port??config.port;
+ assert(Number.isInteger(port)&&port>=1024&&port<=65535,'instance_unverifiable','起動済みの接続ポートを確認できません。',409);
  let proof;
  try{
-  const response=await fetchImpl(`http://127.0.0.1:${config.port}/desktop-instance?nonce=${nonce}`,{redirect:'error',signal:AbortSignal.timeout(2500)});
+  const response=await fetchImpl(`http://127.0.0.1:${port}/desktop-instance?nonce=${nonce}`,{redirect:'error',signal:AbortSignal.timeout(2500)});
   assert(response.ok,'instance_unverifiable','起動済みの接続を確認できません。',409);
   const reader=response.body.getReader();let bytes=0,chunks=[];
   try{for(;;){const {done,value}=await reader.read();if(done)break;bytes+=value.length;assert(bytes<=1024,'instance_unverifiable','接続確認の応答が不正です。',409);chunks.push(value);}}finally{await reader.cancel().catch(()=>{});}

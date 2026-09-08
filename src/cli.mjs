@@ -13,6 +13,7 @@ import { createRunLog } from './run-log.mjs';
 import { selectThinkDeeper } from './model-selection.mjs';
 import { attachRequestImages } from './image-attachments.mjs';
 import {existingDesktopPlan,registerDesktopInstance} from './desktop-instance.mjs';
+import {reserveBridgePort} from './listen.mjs';
 async function openEdge(config){
   assert(process.platform==='win32','windows_required','専用Edgeの自動起動はWindows用です。');
   // Never silently reuse an unrelated debugging port/profile.
@@ -75,9 +76,9 @@ async function main(){
     server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log,selectModel:selectThinkDeeper,attachImages:attachRequestImages}),ledger,log,instanceProof:nonce=>proveInstance?.(nonce)});
     const shutdown=async()=>{await server.stop();await runLog.flush();await unlock();process.exit(0);};
     process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
-    await new Promise((resolve,reject)=>{server.once('error',error=>reject(error.code==='EADDRINUSE'
-      ?new BridgeError('bridge_port_in_use',`接続ポート ${config.port} は使用中です。M365Relayが起動済みなら、その起動ウィンドウを使用してください。別のアプリが使用している場合は、そのアプリを終了してから起動し直してください。`,409)
-      :error));server.listen(config.port,'127.0.0.1',resolve);});
+    const preferredPort=config.port;
+    config.port=await reserveBridgePort(server,preferredPort,{allowFallback:command==='run'});
+    if(config.port!==preferredPort)console.log(`接続には空きポート ${config.port} を使用します。`);
     // Reserve both the process lock and HTTP port before changing the dedicated profile.
     if(command==='run'){
       assert(process.platform==='win32','windows_required','Run.cmdはWindows用です。');

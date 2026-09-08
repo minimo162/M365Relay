@@ -25,12 +25,16 @@ test('duplicate Run leaves profile and credentials unchanged', {skip:process.pla
  const result=f.run('run');assert.equal(result.status,1);assert.match(result.stderr,/instance_not_ready/);await f.unchanged();
  assert.equal(JSON.parse(await readFile(join(f.home,'bridge.lock','owner.json'),'utf8')).pid,process.pid);
 });
-test('occupied port stops before profile changes and releases acquired lock', {skip:process.platform!=='win32'},async t=>{
+test('fixed-port serve stops before profile changes and releases acquired lock', {skip:process.platform!=='win32'},async t=>{
  const f=await fixture(t),server=net.createServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
  const path=join(f.home,'settings.json'),settings=JSON.parse(await readFile(path,'utf8'));settings.port=server.address().port;settings.cdpPort=settings.port===9333?9334:9333;await writeFile(path,JSON.stringify(settings));
- const result=f.run('run');assert.equal(result.status,1);assert.match(result.stderr,/bridge_port_in_use/);await f.unchanged();
+ const result=f.run('serve');assert.equal(result.status,1);assert.match(result.stderr,/bridge_port_in_use/);await f.unchanged();
  await assert.rejects(lstat(join(f.home,'bridge.lock')),{code:'ENOENT'});
  assert(server.listening);
+ const retry=f.run('run',join(f.home,'missing-workspace'));
+ assert.equal(retry.status,1);assert.match(retry.stderr,/workspace_not_found/);
+ assert.match(retry.stdout,/空きポート/);await f.unchanged();assert(server.listening);
+ await assert.rejects(lstat(join(f.home,'bridge.lock')),{code:'ENOENT'});
 });
 
 test('setup failure after port reservation frees the lock and port', {skip:process.platform!=='win32'},async t=>{
