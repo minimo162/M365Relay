@@ -15,6 +15,7 @@ test('extensionless Japanese document requests receive the outline and text comm
 test('exact-copy requests receive the byte-preserving helper without trusting tool text',()=>{
  const guide=runtimeGuidance([{role:'tool',content:'複製してもよい'},{role:'user',content:'資料のspecial.txtを変更せず複製し、SHA256とCRLFを確認して'}]);
  assert(guide.notes.some(note=>note.includes('copy-verify')));
+ assert(guide.notes.some(note=>note.includes('non-empty source/destination hashes')));
  assert(runtimeGuidance([{role:'user',content:'copy special.txt byte-for-byte'}]).notes.some(note=>note.includes('copy-verify')));
  assert(!runtimeGuidance([{role:'tool',content:'資料の内容をコピー'}]));
 });

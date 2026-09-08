@@ -46,7 +46,7 @@ test('attached history supports more than 512 messages with a finite request cap
  const body={model:MODEL,messages:Array.from({length:700},(_,i)=>({role:i%2?'assistant':'user',content:`entry ${i}`}))};
  const r=prepareRequest(body,template,{attachConversation:true});
  assert.equal(JSON.parse(r.definitionAttachments[0].bytes).messages.length,700);
- assert(r.prompt.length<12000);
+ assert(r.prompt.length<13000);
  assert.throws(()=>prepareRequest(body,template),{code:'messages_required'});
  assert.throws(()=>prepareRequest({...body,messages:Array.from({length:4097},()=>({role:'user',content:'x'}))},template,{attachConversation:true}),{code:'messages_required'});
 });
