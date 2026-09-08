@@ -8,7 +8,8 @@ export function runtimeGuidance(messages){
    'create result.xlsx',
    'batch result.xlsx --input operations.json',
    'get result.xlsx /Sheet1/B4 --json',
-   'validate result.xlsx --json'
+   'validate result.xlsx --json',
+   "view result.xlsx screenshot --range 'Sheet1!A1:C10' --out result.png"
   ],
   batch_example:[
    {command:'set',path:'/Sheet1/A1',props:{value:'Sample',type:'string'}},
@@ -25,6 +26,6 @@ export function runtimeGuidance(messages){
    'A newly created xlsx has Sheet1. Numeric value arguments and SUM formulas were verified in the bundled version.',
    'These basic commands are already verified; do not reread broad help to rediscover them. Use narrow help only for additional properties or unfamiliar operations.',
    'Independent cell writes and their readback can be grouped into one terminal request. Check errors and preserve existing files.',
-   'Validation confirms structure, not visual fidelity. Report display verification separately.'
+   'Validation confirms structure, not visual fidelity. Screenshot range is an example: include the required content, inspect the generated image with view_image, and report uninspected areas separately.'
   ]};
 }

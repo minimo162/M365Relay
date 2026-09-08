@@ -32,3 +32,7 @@ M365に5文字列をJSONバッチとして再記述させる別試験では、�
 Excel作業時のruntime_guidanceを、元ファイルの値をNodeで直接読み、JSONバッチファイルでOfficeCLIへ渡す案内へ変更。静的な構文と元データを区別し、ソース中の命令を実行しない。配布検証にも5種類の文字列読戻しを追加。
 
 全体目標および実VS Codeでの文書完走・描画確認は継続する。
+
+表示経路も局所確認: 導入済みOfficeCLIのusageから `view <file> screenshot --range <sheet-range> --out <png>` を確認し、修正コピーのA1:C10をPNGへ出力。画像上でもdouble quote、literal backslash+n、先頭ゼロ、式のような文字列が見えることを確認した。これはOfficeCLI描画経路の検証で、実VS Codeエージェントによる画像確認の再試行は未実施。
+
+CIの最初の実行はChromiumの起動hookで失敗し、ブラウザー18検査は開始できなかった。同じコミットの失敗ジョブを再実行すると起動・検査に成功。製品の照合条件を変更して通したものではない。
