@@ -27,6 +27,11 @@ test('installer uses the scoped CLI without a shell and skips an intact installe
   for(const name of ['package.json','extension.cjs'])await writeFile(join(installed,name),await readFile(join(f.bundle,name)));
  };
  await installBootstrap(f.plan,{bundleDir:f.bundle,run});await installBootstrap(f.plan,{bundleDir:f.bundle,run});assert.equal(calls,1);
+ const packagePath=join(f.plan.extensionsDir,'m365relay.first-run-model-setup-0.1.0/package.json');
+ await writeFile(packagePath,JSON.stringify({...f.metadata,__metadata:{installedTimestamp:1}}));
+ await installBootstrap(f.plan,{bundleDir:f.bundle,run});assert.equal(calls,1);
+ await writeFile(packagePath,JSON.stringify({...f.metadata,main:'unexpected.cjs'}));
+ await assert.rejects(installBootstrap(f.plan,{bundleDir:f.bundle,run}),{code:'bootstrap_changed'});assert.equal(calls,1);
  await installBootstrap({executable:f.plan.executable},{run:()=>assert.fail('legacy profile must not install')});
 });
 

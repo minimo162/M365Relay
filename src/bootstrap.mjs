@@ -2,7 +2,7 @@ import {readFile,realpath,mkdir} from 'node:fs/promises';
 import {dirname,join,resolve,relative,isAbsolute,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFile} from 'node:child_process';
-import {promisify} from 'node:util';
+import {promisify,isDeepStrictEqual} from 'node:util';
 import {setTimeout as delay} from 'node:timers/promises';
 import {assert,BridgeError} from './errors.mjs';
 
@@ -30,7 +30,10 @@ export async function installBootstrap(plan,{bundleDir=fileURLToPath(new URL('..
  const ready=async()=>{
   try{
    const m=JSON.parse(await readFile(join(installed,'package.json'),'utf8'));
-   return m.name===metadata.name&&m.publisher===metadata.publisher&&m.version===metadata.version&&(await readFile(join(installed,'extension.cjs'))).equals(expected);
+   delete m.__metadata; // VS Code adds installation metadata to local VSIXes.
+   const code=await readFile(join(installed,'extension.cjs'));
+   assert(isDeepStrictEqual(m,metadata)&&code.equals(expected),'bootstrap_changed','初回準備用拡張が配布内容と一致しません。専用環境の拡張を確認してください。',503);
+   return true;
   }catch(e){if(e.code==='ENOENT')return false;throw e;}
  };
  if(await ready())return;
