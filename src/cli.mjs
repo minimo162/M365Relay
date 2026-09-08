@@ -12,6 +12,7 @@ import { findVSCode,prepareDesktop,launchDesktop } from './desktop.mjs';
 import { createRunLog } from './run-log.mjs';
 import { selectThinkDeeper } from './model-selection.mjs';
 import { attachRequestImages } from './image-attachments.mjs';
+import {existingDesktopPlan,registerDesktopInstance} from './desktop-instance.mjs';
 async function openEdge(config){
   assert(process.platform==='win32','windows_required','専用Edgeの自動起動はWindows用です。');
   // Never silently reuse an unrelated debugging port/profile.
@@ -56,14 +57,22 @@ async function main(){
   if(command==='open'){await openEdge(config);return;}
   if(command==='diagnose'){console.log(JSON.stringify(await diagnoseBrowser(config),null,2));return;}
   if(command!=='serve'&&command!=='run')throw new BridgeError('unknown_command','help で利用可能なコマンドを確認してください。');
-  const unlock=await acquireProcessLock(config.home);
+  let unlock;
+  try{unlock=await acquireProcessLock(config.home);}catch(error){
+    if(command!=='run'||error.code!=='already_running')throw error;
+    // No profile setup, token transmission, lock recovery or request replay.
+    const plan=await existingDesktopPlan(config,{workspace:process.argv[3]});
+    plan.executable=await findVSCode();await launchDesktop(plan);
+    console.log('起動済みのM365Relayの画面を開きました。');return;
+  }
   let server,runLog;
   try{
     const template=await readFile(join(ROOT,'prompts','m365-tool-router.md'),'utf8');
     const ledger=new Ledger(config.home,config.token);await ledger.load();
     runLog=await createRunLog(config.home,{jsonConsole:process.env.M365_RELAY_JSON_LOGS==='1'});
     const log=record=>runLog.log(record);
-    server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log,selectModel:selectThinkDeeper,attachImages:attachRequestImages}),ledger,log});
+    let proveInstance;
+    server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log,selectModel:selectThinkDeeper,attachImages:attachRequestImages}),ledger,log,instanceProof:nonce=>proveInstance?.(nonce)});
     const shutdown=async()=>{await server.stop();await runLog.flush();await unlock();process.exit(0);};
     process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
     await new Promise((resolve,reject)=>{server.once('error',error=>reject(error.code==='EADDRINUSE'
@@ -78,6 +87,7 @@ async function main(){
     if(desktop){
       await openEdge(config);
       await launchDesktop(desktop);
+      proveInstance=await registerDesktopInstance(config,desktop);
       console.log('接続の準備ができました。専用Edgeのサインインを確認し、VS Codeのチャットで依頼を入力してください。\nこのウィンドウを閉じると接続が終了します。');
     }
     const {version}=JSON.parse(await readFile(join(ROOT,'package.json'),'utf8'));

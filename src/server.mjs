@@ -15,7 +15,7 @@ async function bodyText(req,maxBytes) {
   try{return new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks));}
   catch{throw new BridgeError('invalid_utf8','要求はUTF-8である必要があります。');}
 }
-export function createBridgeServer({config,template,backend,ledger,log=()=>{}}) {
+export function createBridgeServer({config,template,backend,ledger,log=()=>{},instanceProof=()=>undefined}) {
   const queue=new SerialQueue(config.maxQueue);const controllers=new Set();
   const server=http.createServer(async(req,res)=>{
     let parsed, timer, release, fingerprint, possiblySent=false, settled=false;
@@ -28,6 +28,11 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{}}) 
       assert([`127.0.0.1:${port}`,`localhost:${port}`].includes(req.headers.host),'bad_host','ループバック以外のHostは受理しません。',403);
       assert(!req.headers.origin,'cross_origin','ブラウザーからのクロスオリジン要求は受理しません。',403);
       if(req.method==='GET' && req.url==='/health')return json(res,200,{status:'ready',backend:'m365-cdp',live_verified:false,model:MODEL});
+      if(req.method==='GET'&&/^\/desktop-instance\?nonce=[0-9a-f]{64}$/.test(req.url)){
+        const proof=instanceProof(req.url.slice(req.url.indexOf('=')+1));
+        assert(proof,'instance_not_ready','画面の起動準備中です。',409);
+        return json(res,200,proof);
+      }
       assert(equal(req.headers.authorization??'',`Bearer ${config.token}`),'unauthorized','ローカル接続キーが必要です。',401);
       if(req.method==='GET' && req.url==='/v1/models')return json(res,200,{object:'list',data:[{id:MODEL,object:'model',created:0,owned_by:'local-m365-ui-bridge'}]});
       assert(req.method==='POST' && req.url==='/v1/chat/completions','not_found','このエンドポイントは対応していません。',404);

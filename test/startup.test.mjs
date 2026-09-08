@@ -22,7 +22,7 @@ async function fixture(t){
 test('duplicate Run leaves profile and credentials unchanged', {skip:process.platform!=='win32'},async t=>{
  const f=await fixture(t);await mkdir(join(f.home,'bridge.lock'));
  await writeFile(join(f.home,'bridge.lock','owner.json'),JSON.stringify({pid:process.pid,started:new Date().toISOString()}));
- const result=f.run('run');assert.equal(result.status,1);assert.match(result.stderr,/already_running/);await f.unchanged();
+ const result=f.run('run');assert.equal(result.status,1);assert.match(result.stderr,/instance_not_ready/);await f.unchanged();
  assert.equal(JSON.parse(await readFile(join(f.home,'bridge.lock','owner.json'),'utf8')).pid,process.pid);
 });
 test('occupied port stops before profile changes and releases acquired lock', {skip:process.platform!=='win32'},async t=>{
