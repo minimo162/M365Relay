@@ -14,11 +14,15 @@ test('window observation returns without waiting for the long-lived Code process
  const f=fixture();const receipt=await launchDesktop(plan,{spawnProcess:f.spawnProcess,observeWindow:async()=>({status:'window'})});assert.deepEqual(receipt,{status:'window'});assert(f.child.unreferenced);
 });
 test('inspection failures remain unconfirmed and do not expose raw errors',async()=>{
- const f=fixture();const receipt=await launchDesktop(plan,{spawnProcess:f.spawnProcess,observeWindow:async()=>{throw Error('PRIVATE');}});assert.deepEqual(receipt,{status:'unconfirmed'});assert(!desktopLaunchMessage(receipt).includes('PRIVATE'));assert(!desktopLaunchMessage({status:'failed',exitCode:'PRIVATE'}).includes('PRIVATE'));
+ const f=fixture();const receipt=await launchDesktop(plan,{spawnProcess:f.spawnProcess,startupTimeoutMs:10,observeWindow:async()=>{throw Error('PRIVATE');}});assert.deepEqual(receipt,{status:'unconfirmed'});assert(!desktopLaunchMessage(receipt).includes('PRIVATE'));assert(!desktopLaunchMessage({status:'failed',exitCode:'PRIVATE'}).includes('PRIVATE'));
 });
 test('the observer uses only fixed script arguments and accepts only the exact result',async()=>{
  for(const stdout of ['window_ready','window_ready\nPRIVATE']){
   let options;const receipt=await observeDesktopWindow(plan,123,new AbortController().signal,{platform:'win32',execute:(exe,args,opts,done)=>{options=opts;assert(exe.endsWith('powershell.exe'));assert(args.includes('123'));assert.equal(args.at(-1),plan.executable);done(null,stdout);}});
   assert.equal(options.windowsHide,true);assert.equal(options.maxBuffer,4096);assert.equal(receipt.status,stdout==='window_ready'?'window':'unconfirmed');
  }
+});
+
+test('an unavailable observer does not misclassify a later normal handoff',async()=>{
+ const f=fixture();const receipt=launchDesktop(plan,{spawnProcess:f.spawnProcess,startupTimeoutMs:1000,observeWindow:async()=>{setImmediate(()=>f.child.emit('exit',0,null));return {status:'unconfirmed'};}});assert.deepEqual(await receipt,{status:'handoff',exitCode:0});
 });

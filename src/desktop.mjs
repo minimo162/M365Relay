@@ -131,7 +131,7 @@ export function desktopLaunchMessage(receipt){
  return 'VS Codeへ起動を要求しましたが、ウィンドウを確認できません。更新状態やVS Code側の表示を確認してください。';
 }
 
-export async function launchDesktop(plan,{spawnProcess=spawn,observeWindow=observeDesktopWindow}={}){
+export async function launchDesktop(plan,{spawnProcess=spawn,observeWindow=observeDesktopWindow,startupTimeoutMs=35000}={}){
  assert(plan.executable,'vscode_not_found','Visual Studio Codeが見つかりません。',503);
  const env={...process.env};
  for(const name of ['ELECTRON_RUN_AS_NODE','VSCODE_IPC_HOOK_CLI','NODE_OPTIONS','NODE_PATH'])delete env[name];
@@ -145,9 +145,13 @@ export async function launchDesktop(plan,{spawnProcess=spawn,observeWindow=obser
   {detached:true,stdio:'ignore',shell:false,env});
  let onExit;
  const exited=new Promise(resolve=>{onExit=code=>resolve({status:code===0?'handoff':'failed',exitCode:Number.isInteger(code)?code:null});child.once('exit',onExit);});
- const controller=new AbortController();
+ const controller=new AbortController();let timer;
  try{
   await once(child,'spawn');
-  return await Promise.race([exited,Promise.resolve().then(()=>observeWindow(plan,child.pid,controller.signal)).catch(()=>({status:'unconfirmed'}))]);
- }finally{controller.abort();child.removeListener('exit',onExit);child.unref();}
+  const windowReady=new Promise(resolve=>{
+   Promise.resolve().then(()=>observeWindow(plan,child.pid,controller.signal)).then(receipt=>{if(receipt?.status==='window')resolve(receipt);}).catch(()=>{});
+  });
+  const deadline=new Promise(resolve=>{timer=setTimeout(()=>resolve({status:'unconfirmed'}),startupTimeoutMs);});
+  return await Promise.race([exited,windowReady,deadline]);
+ }finally{clearTimeout(timer);controller.abort();child.removeListener('exit',onExit);child.unref();}
 }
