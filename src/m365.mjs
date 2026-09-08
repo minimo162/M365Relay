@@ -11,7 +11,8 @@ export class M365Backend {
     this.responseTiming={responsePollMs,responseStableMs};
   }
   async complete(request,{signal,onBeforeSend}) {
-    assert(!request.images?.length||this.attachImages,'image_transport_unavailable','画像添付の搬送はまだ有効ではありません。画像を省略して送信することはしません。',400);
+    const attachments=[...(request.definitionAttachments??[]),...(request.images??[])];
+    assert(!attachments.length||this.attachImages,'image_transport_unavailable','添付の搬送が有効ではありません。定義や画像を省略して送信することはしません。',400);
     let imageAttachment;
     const config=this.config;let browser,targetId,sessionId,sent=false,success=false,failure,phase = 'connect';
     const started=performance.now();let phaseStarted=started,snapshots=0,firstReplyMs=null,lastReplyChangeMs=null;
@@ -91,7 +92,7 @@ export class M365Backend {
       }
       assert(state.editor&&!state.nonempty&&!state.input.trim()&&!state.busy,'conversation_not_empty','会話の初期化を確認できません。送信を停止します。',409);
       if(this.selectModel){enter('model_select');await this.selectModel({browser,sessionId,config,signal});}
-      if(request.images?.length){enter('image_attach');imageAttachment=await this.attachImages({browser,sessionId,config,images:request.images,signal,onBeforeUpload:async()=>{await onBeforeSend();sent=true;}});}
+      if(attachments.length){enter('image_attach');imageAttachment=await this.attachImages({browser,sessionId,config,images:attachments,signal,onBeforeUpload:async()=>{await onBeforeSend();sent=true;}});}
       // M365 can replace an already visible editor after document load. Wait on
       // the actual node identity, not just presence or document.readyState.
       enter('editor_stable');

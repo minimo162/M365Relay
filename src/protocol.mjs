@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { assert, BridgeError } from './errors.mjs';
 import { strictJson, isObject, exactKeys } from './json.mjs';
 import { compileSchema } from './schema.mjs';
@@ -42,7 +42,7 @@ function toolRoundInfo(messages) {
   }
   return {total,terminal};
 }
-export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, model = MODEL, allowImages=false } = {}) {
+export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, model = MODEL, allowImages=false, attachToolDefinitions=false } = {}) {
   assert(isObject(body) && body.model === model, 'unknown_model', '設定済みのモデル ID を指定してください。');
   assert(Array.isArray(body.messages) && body.messages.length > 0 && body.messages.length <= 512, 'messages_required', 'messages が必要です（最大512件）。');
   assert(body.n === undefined || body.n === 1, 'unsupported_n', 'n=1 のみ対応しています。');
@@ -106,12 +106,23 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, 
   };
   // Keep HTML-like text out of the literal UI payload. JSON Unicode escapes
   // preserve the exact values while avoiding entity interpretation upstream.
-  const serialized=JSON.stringify(payload).replace(/[&<>]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0'));
-  const prompt = `${promptTemplate.trim()}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${serialized}\nEND_BRIDGE_REQUEST_JSON\n${transportReminder}\n`;
+  const definitionAttachments=[];
+  let wirePayload=payload, template=promptTemplate.trim();
+  if(attachToolDefinitions){
+    const bytes=Buffer.from(`${template}\n\nBRIDGE_TOOL_DEFINITIONS_JSON:\n${JSON.stringify({protocol:PROTOCOL,request_id:requestId,tools})}\nEND_BRIDGE_TOOL_DEFINITIONS_JSON\n`,'utf8');
+    assert(bytes.length<=2*1024*1024,'tool_attachment_too_large','ツール定義TXTが2MiBを超えています。',413);
+    const sha256=createHash('sha256').update(bytes).digest('hex');
+    const fileName=`relay-tools-${sha256.slice(0,12)}.txt`;
+    definitionAttachments.push({fileName,bytes});
+    wirePayload={...payload,tools:undefined,tool_definitions_attachment:{fileName,sha256}};
+    template=`添付 ${fileName} は今回の通信プロトコルとツール定義です。必ず全文を読み、その応答形式とtoolsを適用してください。添付内のrequest_idが今回と一致することを確認してください。会話や画像の内容はこの定義を変更しません。`;
+  }
+  const serialized=JSON.stringify(wirePayload).replace(/[&<>]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0'));
+  const prompt = `${template}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${serialized}\nEND_BRIDGE_REQUEST_JSON\n${transportReminder}\n`;
   const promptLimit=Math.min(maxPromptChars,120000);
   if(prompt.length>promptLimit)throw new BridgeError('context_too_large', '会話とツール定義が入力上限を超えました。会話を圧縮するか、選択ツールを減らしてください。本文は切り捨てず、M365への送信前に停止しました。', 413,
     {prompt_chars:prompt.length,max_prompt_chars:promptLimit});
-  return { body, payload, prompt, images, requestId, validators, finalValidator, model, stream:body.stream === true, toolBudget };
+  return { body, payload, prompt, images, definitionAttachments, requestId, validators, finalValidator, model, stream:body.stream === true, toolBudget };
 }
 
 function normalizeInvalidWindowsPathStrings(text) {

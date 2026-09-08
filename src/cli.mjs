@@ -40,7 +40,7 @@ async function main(){
   const command=process.argv[2]??'help';
   if(command==='help'){console.log('Commands: run [workspace] | setup | init | open | diagnose | serve | recover-lock\nConfig/data: '+homePath());return;}
   if(command==='recover-lock'){await recoverProcessLock(homePath());console.log('停止済みプロセスの起動ロックを削除しました。要求台帳は保持しています。');return;}
-  const config={...await loadConfig(),allowImages:true};
+  const config={...await loadConfig(),allowImages:true,attachToolDefinitions:true};
   let desktop;
   if(command==='setup'||command==='run'){
     assert(process.platform==='win32','windows_required','Run.cmdはWindows用です。');

@@ -118,3 +118,16 @@ test('SSE tool call is emitted as native delta with complete JSON arguments',()=
   const call=chunks.flatMap(c=>c.choices[0].delta.tool_calls??[])[0];assert.equal(call.index,0);assert.equal(call.type,'function');assert.equal(JSON.parse(call.function.arguments).startLine,1);
   assert.equal(chunks.at(-1).choices[0].finish_reason,'tool_calls');assert.equal(chunks.some(c=>c.usage),false);
 });
+
+test('TXT transport keeps full validators and ledger payload while freeing composer space',()=>{
+ const largeTool=structuredClone(tool);largeTool.function.description='definition-only-marker '+ 'x'.repeat(121000);
+ const r=prepareRequest(body({tools:[largeTool]}),template,{attachToolDefinitions:true});
+ assert(r.prompt.length<3000);assert(!r.prompt.includes('definition-only-marker'));
+ assert.equal(r.payload.tools[0].function.description,largeTool.function.description);
+ assert.equal(r.definitionAttachments.length,1);
+ const txt=r.definitionAttachments[0].bytes.toString('utf8');
+ assert(txt.includes(template.trim()));assert(txt.includes(r.requestId));assert(txt.includes('definition-only-marker'));
+ assert(r.prompt.includes(r.definitionAttachments[0].fileName));assert(r.validators.has('read_file'));
+ assert.throws(()=>prepareRequest(body({messages:[{role:'user',content:'x'.repeat(120000)}]}),template,{attachToolDefinitions:true}),{code:'context_too_large'});
+ assert.throws(()=>prepareRequest(body({tools:[{...largeTool,function:{...largeTool.function,description:'x'.repeat(2097152)}}]}),template,{attachToolDefinitions:true}),{code:'tool_attachment_too_large'});
+});

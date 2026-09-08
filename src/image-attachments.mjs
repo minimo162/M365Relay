@@ -20,28 +20,28 @@ export async function attachRequestImages({browser,sessionId,config,images,signa
  try{
   const paths=[];
   for(const image of images){
-   assert(/^image-[1-4]-[0-9a-f]{12}\.(png|jpg)$/.test(image.fileName),'invalid_image_name','画像名が不正です。');
+   assert(/^(?:image-[1-4]-[0-9a-f]{12}\.(?:png|jpg)|relay-tools-[0-9a-f]{12}\.txt)$/.test(image.fileName),'invalid_image_name','添付名が不正です。');
    const path=join(directory,image.fileName);await writeFile(path,image.bytes,{flag:'wx',mode:0o600});written.push(path);paths.push(await realpath(path));
   }
   const check=async()=>{
    const r=await browser.send('Runtime.evaluate',{expression:`(${attachmentState.toString()})(${JSON.stringify(config.origin)},${JSON.stringify(images.map(i=>i.fileName))})`,returnByValue:true},sessionId,signal);
-   assert(!r.exceptionDetails&&r.result?.value&&!r.result.value.wrongOrigin,'image_attachment_changed','画像添付画面を確認できません。',502);
-   assert(!r.result.value.dialog,'image_confirmation_required','専用Copilotの画像に関する初回確認を利用者が完了してください。',409);
+   assert(!r.exceptionDetails&&r.result?.value&&!r.result.value.wrongOrigin,'image_attachment_changed','添付画面を確認できません。',502);
+   assert(!r.result.value.dialog,'image_confirmation_required','専用Copilotの添付に関する初回確認を利用者が完了してください。',409);
    return r.result.value;
   };
-  const before=await check();assert(before.attachmentCount===0,'image_attachment_changed','既存の添付があるため画像を追加しません。',409);
+  const before=await check();assert(before.attachmentCount===0,'image_attachment_changed','既存の添付があるためファイルを追加しません。',409);
   const {root}=await browser.send('DOM.getDocument',{},sessionId,signal);
   const {nodeIds}=await browser.send('DOM.querySelectorAll',{nodeId:root.nodeId,selector:'input#upload-file-button[type="file"]'},sessionId,signal);
-  assert(nodeIds?.length===1,'image_input_missing','画像の添付欄を一意に確認できません。',503);
+  assert(nodeIds?.length===1,'image_input_missing','ファイルの添付欄を一意に確認できません。',503);
   // Upload itself is an external side effect. Journal before the single call.
   await onBeforeUpload();
   await browser.send('DOM.setFileInputFiles',{nodeId:nodeIds[0],files:paths},sessionId,signal,30000);
   const deadline=Date.now()+config.readyTimeoutMs;let stableSince;
   do{
    const state=await check();
-   if(state.attached.every(Boolean)&&state.attachmentCount===images.length&&!state.pending){stableSince??=Date.now();if(Date.now()-stableSince>=500)return {cleanup,verify:async()=>{const current=await check();assert(current.attached.every(Boolean)&&current.attachmentCount===images.length&&!current.pending,'image_attachment_changed','送信直前に画像の添付状態が変わりました。送信しません。',409);}};}else stableSince=undefined;
+   if(state.attached.every(Boolean)&&state.attachmentCount===images.length&&!state.pending){stableSince??=Date.now();if(Date.now()-stableSince>=500)return {cleanup,verify:async()=>{const current=await check();assert(current.attached.every(Boolean)&&current.attachmentCount===images.length&&!current.pending,'image_attachment_changed','送信直前にファイルの添付状態が変わりました。送信しません。',409);}};}else stableSince=undefined;
    await delay(100,signal);
   }while(Date.now()<deadline);
-  throw new BridgeError('image_upload_unknown','画像の添付完了を確認できません。自動で再添付しません。',502);
+  throw new BridgeError('image_upload_unknown','ファイルの添付完了を確認できません。自動で再添付しません。',502);
  }catch(error){await cleanup();throw error;}
 }
