@@ -30,22 +30,6 @@ function textContent(c,context,images,allowImages) {
   });
 }
 
-function toolRoundInfo(messages) {
-  // This is a retained-history guard, not a durable conversation-wide budget.
-  // Client compaction can remove calls; summary prose is not execution evidence.
-  let start=0;
-  for(let i=messages.length-1;i>=0;i--){
-    if(messages[i]?.role==='user'){start=i+1;break;}
-  }
-  let total=0,terminal=0;
-  for(let i=start;i<messages.length;i++){
-    const m=messages[i];
-    if(m?.role!=='assistant'||!Array.isArray(m.tool_calls))continue;
-    total+=m.tool_calls.length;
-    for(const c of m.tool_calls)if(c?.function?.name==='run_in_terminal')terminal++;
-  }
-  return {total,terminal};
-}
 export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, model = MODEL, allowImages=false, attachToolDefinitions=false, attachConversation=false } = {}) {
   assert(isObject(body) && body.model === model, 'unknown_model', '設定済みのモデル ID を指定してください。');
   const maxMessages=attachConversation?4096:512;
@@ -102,8 +86,6 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, 
     finalValidator = compileSchema(format.json_schema.schema, { source: 'response_format' });
   }
   const requestId = randomUUID();
-  const toolRounds = toolRoundInfo(messages);
-  const toolBudget = { totalUsed:toolRounds.total, terminalUsed:toolRounds.terminal, maxTotal:12, maxTerminal:3 };
   const payload = {
     protocol:PROTOCOL, request_id:requestId, messages, tools, tool_choice:choice,
     response_format:format, max_tool_calls_per_response:1,
@@ -113,7 +95,7 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, 
   // preserve the exact values while avoiding entity interpretation upstream.
   const definitionAttachments=[];
   let wirePayload=payload, template=promptTemplate.trim();
-  if(attachConversation){const guide=runtimeGuidance(messages);wirePayload={...wirePayload,tool_execution_budget:toolBudget,...(guide?{runtime_guidance:guide}:{})};}
+  if(attachConversation){const guide=runtimeGuidance(messages);wirePayload={...wirePayload,...(guide?{runtime_guidance:guide}:{})};}
   if(attachToolDefinitions){
     const bytes=Buffer.from(`${template}\n\nBRIDGE_TOOL_DEFINITIONS_JSON:\n${JSON.stringify({protocol:PROTOCOL,request_id:requestId,tools})}\nEND_BRIDGE_TOOL_DEFINITIONS_JSON\n`,'utf8');
     assert(bytes.length<=2*1024*1024,'tool_attachment_too_large','ツール定義TXTが2MiBを超えています。',413);
@@ -143,7 +125,7 @@ response_formatがJSONを要求する場合も、そのJSONをこの2行の間�
   const promptLimit=Math.min(maxPromptChars,120000);
   if(prompt.length>promptLimit)throw new BridgeError('context_too_large', '会話とツール定義が入力上限を超えました。会話を圧縮するか、選択ツールを減らしてください。本文は切り捨てず、M365への送信前に停止しました。', 413,
     {prompt_chars:prompt.length,max_prompt_chars:promptLimit});
-  return { body, payload, prompt, images, definitionAttachments, requestId, validators, finalValidator, model, stream:body.stream === true, toolBudget };
+  return { body, payload, prompt, images, definitionAttachments, requestId, validators, finalValidator, model, stream:body.stream === true };
 }
 
 function normalizeInvalidWindowsPathStrings(text) {
@@ -205,15 +187,6 @@ function setPointer(root,pointer,value) {
   }
 }
 
-function assertToolBudget(req,name) {
-  const b=req.toolBudget??{totalUsed:0,terminalUsed:0,maxTotal:12,maxTerminal:3};
-  assert(b.totalUsed<b.maxTotal,'tool_loop_detected',
-    'ツール呼び出し回数が上限に達しました。同じ処理を繰り返さず、取得済み情報と失敗理由を利用者へ説明してください。',502,
-    {stage:'tool_budget',tool_rounds:b.totalUsed,max_tool_rounds:b.maxTotal});
-  if(name==='run_in_terminal')assert(b.terminalUsed<b.maxTerminal,'tool_loop_detected',
-    'ターミナル実行を繰り返しています。同じ依存関係・コマンド方式を再試行せず、別手段へ切り替えるか利用者へ制約を説明してください。',502,
-    {stage:'tool_budget',terminal_rounds:b.terminalUsed,max_terminal_rounds:b.maxTerminal});
-}
 function parseRawTool(text,req) {
   const head=/^BRIDGE(?:_|\\_)TOOL\s+([a-f0-9-]{36})(?:\s+|$)/i.exec(text);
   if(!head)return null;
@@ -298,7 +271,6 @@ function parseRawTool(text,req) {
   }
 
   assert(text.slice(pos).trim()==='','invalid_envelope','ツール応答の終端後に余分な内容があります。',502);
-  assertToolBudget(req,name);
   const choice=req.payload.tool_choice;
   assert(choice!=='none'&&req.validators.has(name),'tool_choice_violation','今回はこのツール呼び出しを受理できません。',502);
   assert(!isObject(choice)||choice.function.name===name,'tool_choice_violation','指定されたツール名と一致しません。',502);
@@ -352,7 +324,6 @@ export function parseEnvelope(raw, req) {
   if (out.action === 'tool_calls') {
     assert(choice !== 'none' && out.tool_calls.length === 1, 'tool_choice_violation', '今回はこのツール呼び出しを受理できません。', 502);
     const t = out.tool_calls[0];
-    assertToolBudget(req,t.name);
     assert(exactKeys(t,['name','arguments']) && typeof t.name === 'string' && isObject(t.arguments) && req.validators.has(t.name), 'unknown_tool', '未登録ツールまたは不正な引数形式です。', 502);
     assert(!isObject(choice) || choice.function.name === t.name, 'tool_choice_violation', '指定されたツール名と一致しません。', 502);
     assert(req.validators.get(t.name)(t.arguments), 'invalid_tool_arguments', '引数がVS Codeから渡されたJSON Schemaに適合しません。', 502);

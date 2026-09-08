@@ -79,22 +79,12 @@ test('final transport still enforces the requested JSON schema',()=>{
  assert.equal(parseEnvelope(`BRIDGE_FINAL ${r.requestId}\n{"title":"ok"}`,r).content,'{"title":"ok"}');
  assert.throws(()=>parseEnvelope(`BRIDGE_FINAL ${r.requestId}\n{"title":1}`,r),{code:'invalid_final_format'});
 });
-test('fourth terminal call is blocked for raw and legacy JSON transports',()=>{
- const r=request({messages:history(3)});
- assert.equal(r.toolBudget.terminalUsed,3);
- for(const raw of [rawTool(r),jsonTool(r)])assert.throws(()=>parseEnvelope(raw,r),{code:'tool_loop_detected'});
- assert.equal(parseEnvelope(`BRIDGE_FINAL ${r.requestId} No text extracted.`,r).action,'final');
-});
-test('thirteenth total tool call is blocked for both transports',()=>{
- const r=request({messages:history(12,'other_tool')});
- assert.equal(r.toolBudget.totalUsed,12);
- for(const raw of [rawTool(r,{name:'other_tool'}),jsonTool(r,'other_tool')])assert.throws(()=>parseEnvelope(raw,r),{code:'tool_loop_detected'});
-});
-test('third terminal call is allowed and an explicit new user turn resets the budget',()=>{
- const r=request({messages:history(2)});assert.equal(parseEnvelope(rawTool(r),r).action,'tool_calls');
- const fresh=request({messages:[...history(3),{role:'user',content:'new request'}]});
- assert.equal(fresh.toolBudget.totalUsed,0);assert.equal(fresh.toolBudget.terminalUsed,0);
- assert.equal(parseEnvelope(rawTool(fresh),fresh).action,'tool_calls');
+test('continued work is accepted beyond former terminal and total call limits',()=>{
+ for(const name of ['run_in_terminal','other_tool']){
+  const r=request({messages:history(50,name)});
+  assert.equal(Object.hasOwn(r,'toolBudget'),false);
+  for(const raw of [rawTool(r,{name}),jsonTool(r,name)])assert.equal(parseEnvelope(raw,r).action,'tool_calls');
+ }
 });
 
 test('fenced json-string arguments preserve exact whitespace, Windows paths and marker text',()=>{
