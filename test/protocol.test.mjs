@@ -128,6 +128,9 @@ test('TXT transport keeps full validators and ledger payload while freeing compo
  const txt=r.definitionAttachments[0].bytes.toString('utf8');
  assert(txt.includes(template.trim()));assert(txt.includes(r.requestId));assert(txt.includes('definition-only-marker'));
  assert(r.prompt.includes(r.definitionAttachments[0].fileName));assert(r.validators.has('read_file'));
+ const wire=JSON.parse(r.prompt.split('BRIDGE_REQUEST_JSON:\n')[1].split('\nEND_BRIDGE_REQUEST_JSON')[0]);
+ assert.deepEqual(wire.available_tool_names,['read_file']);assert.equal(wire.tools,undefined);
+ assert.equal(r.payload.available_tool_names,undefined);
  assert.throws(()=>prepareRequest(body({messages:[{role:'user',content:'x'.repeat(120000)}]}),template,{attachToolDefinitions:true}),{code:'context_too_large'});
  assert.throws(()=>prepareRequest(body({tools:[{...largeTool,function:{...largeTool.function,description:'x'.repeat(2097152)}}]}),template,{attachToolDefinitions:true}),{code:'tool_attachment_too_large'});
 });
