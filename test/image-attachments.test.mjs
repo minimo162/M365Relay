@@ -36,3 +36,17 @@ test('lost upload acknowledgement is never retried and local bytes are removed',
  await assert.rejects(attachRequestImages({browser,config:{home,origin:'https://m365.cloud.microsoft',readyTimeoutMs:10},images,onBeforeUpload:async()=>journaled=true}));
  assert.equal(uploads,1);assert.deepEqual(await readdir(join(home,'image-staging')),[]);
 });
+
+test('generated TXT and image share a single journaled upload',async t=>{
+ const home=await mkdtemp(join(tmpdir(),'relay-attachment-test-'));t.after(()=>rm(home,{recursive:true,force:true}));
+ const files=[{fileName:'relay-tools-123456789abc.txt',bytes:Buffer.from('protocol')},...images];
+ let attached=false,uploads=0,journaled=false;
+ const browser={async send(method,args){
+  if(method==='Runtime.evaluate')return {result:{value:{attached:files.map(()=>attached),attachmentCount:attached?2:0,pending:false}}};
+  if(method==='DOM.getDocument')return {root:{nodeId:1}};
+  if(method==='DOM.querySelectorAll')return {nodeIds:[2]};
+  if(method==='DOM.setFileInputFiles'){assert(journaled);assert.equal(args.files.length,2);uploads++;attached=true;}return {};
+ }};
+ const lease=await attachRequestImages({browser,config:{home,origin:'https://m365.cloud.microsoft',readyTimeoutMs:2000},images:files,onBeforeUpload:async()=>{journaled=true;}});
+ assert.equal(uploads,1);await lease.verify();await lease.cleanup();assert.deepEqual(await readdir(join(home,'image-staging')),[]);
+});
