@@ -25,7 +25,7 @@ run(process.execPath,pdfArgs);
 const result=JSON.parse(await readFile(output,'utf8'));
 assert.equal(result.totalPages,1);assert.equal(result.ocrEnabled,false);
 assert.equal(result.selectionComplete,true);assert.deepEqual(result.pagesWithoutText,[]);
-assert(result.pages[0].textItems.some(i=>i.text.includes('RUNTIME-CHECK')&&Number.isFinite(i.x)&&Number.isFinite(i.y)));
+assert(result.pages[0].text.includes('RUNTIME-CHECK'));assert(result.pages[0].textItems.every(i=>Number.isFinite(i.x)&&Number.isFinite(i.y)));
 assert(result.markdown.includes('17.50'));
 const outputBytes=await readFile(output);
 assert.throws(()=>run(process.execPath,pdfArgs));
@@ -41,22 +41,30 @@ const outside=join(work,'outside.json');
 assert.throws(()=>run(process.execPath,[pdfArgs[0],input,outside,'2']));
 await assert.rejects(readFile(outside),{code:'ENOENT'});
 
-const office=join(app,'runtime','officecli','officecli.exe'),sheet=join(work,'document-runtime.xlsx');
-assert.equal(run(office,['--version']).trim(),'1.0.148');
-run(office,['create',sheet]);
-run(office,['set',sheet,'/Sheet1/A1','--prop','value=1.5']);
-run(office,['set',sheet,'/Sheet1/A2','--prop','value=2']);
-run(office,['set',sheet,'/Sheet1/A3','--prop','formula=SUM(A1:A2)']);
-const cell=JSON.parse(run(office,['get',sheet,'/Sheet1/A3','--json']));
-assert.equal(cell.data.results[0].format.computedValue,'3.5');
-const checked=JSON.parse(run(office,['validate',sheet,'--json']));
-assert.equal(checked.success,true);assert.equal(checked.data.count,0);
+
+const python=join(app,'runtime/python/python.exe'),document=join(app,'python/document_runtime.py');
+const doc=(...args)=>JSON.parse(run(python,['-I','-B',document,...args]));
+assert.equal(doc('pdf-read',input).parser,'pypdfium2');
+const png=join(work,'preview.png');doc('pdf-render',input,png);
+assert.deepEqual((await readFile(png)).subarray(0,8),Buffer.from([137,80,78,71,13,10,26,10]));
+assert.throws(()=>doc('pdf-render',input,png));
 const literalValues=['Literal <tag> &gt; "quoted"','  日本語😀 C:\\new\\notes.txt \\n  ','line1\nline2\tend','00123','=SUM(A1:A2)'];
-const batchPath=join(work,'literal-values.json');
-await writeFile(batchPath,JSON.stringify(literalValues.map((value,i)=>({command:'set',path:`/Sheet1/B${i+1}`,props:{value,type:'string'}}))),{flag:'wx'});
-run(office,['batch',sheet,'--input',batchPath]);
-for(const [i,value]of literalValues.entries()){
- const readback=JSON.parse(run(office,['get',sheet,`/Sheet1/B${i+1}`,'--json']));
- assert.equal(readback.data.results[0].text,value);
-}
-console.log('PASS bundled PDF text/coordinates/output protection and Office formula/readback/schema');
+const dataPath=join(work,'cells.json'),sheet=join(work,'document-runtime.xlsx');
+const cells={A1:{value:1.5},A2:{value:2},A3:{formula:'SUM(A1:A2)'}};
+for(const [i,value]of literalValues.entries())cells[`B${i+1}`]={value};
+await writeFile(dataPath,JSON.stringify({sheet:'Sheet1',cells}),{flag:'wx'});
+const created=doc('xlsx-create',sheet,dataPath);assert.equal(created.formulasCalculated,false);
+const readback=doc('xlsx-read',sheet).sheets[0].cells;
+assert.equal(readback.find(c=>c.address==='A3').value,'=SUM(A1:A2)');
+assert.equal(readback.find(c=>c.address==='A3').cachedValue,null);
+for(const [i,value]of literalValues.entries())assert.equal(readback.find(c=>c.address===`B${i+1}`).value,value);
+assert.throws(()=>doc('xlsx-create',sheet,dataPath));
+// Exercise direct Python child termination with the actual bundled executable.
+const {runPythonWorker}=await import('../src/pdf-process.mjs');
+const hang=join(work,'hang.py');await writeFile(hang,'while True: pass\n'.replace('\\n','\n'),{flag:'wx'});
+await assert.rejects(runPythonWorker(python,hang,[],{timeoutMs:1000}),{code:'PDF_TIMEOUT'});
+const failed=join(work,'failed.py');await writeFile(failed,'print(123)\nraise SystemExit(7)\n',{flag:'wx'});
+await assert.rejects(runPythonWorker(python,failed,[]),{code:'PDF_WORKER_FAILED'});
+const controller=new AbortController();const cancelled=runPythonWorker(python,hang,[],{signal:controller.signal});controller.abort();
+await assert.rejects(cancelled,{code:'PDF_CANCELLED'});
+console.log('PASS bundled Python PDF geometry/render, literal XLSX roundtrip, explicit formula-cache limitation and timeout');

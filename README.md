@@ -52,8 +52,8 @@ Copilot側は、新しい会話を開くたびに`GPT 5.6 Think Deeper`を画面
 接続キーのコピーやJSON編集は不要です。通常のVS Code設定は変更せず、M365Relay専用のユーザーデータを使います。
 専用VS Codeではワークスペース信頼を無効化して起動します。この専用環境で開くすべてのフォルダーが対象で、Restricted Modeによる制限はありません。エージェントの操作承認設定は変更しません。
 専用端末では`M365_RELAY_NODE`が本体に含まれるNode.jsを指します。PowerShellからは`& $env:M365_RELAY_NODE script.mjs`で利用でき、PC全体のPATH変更は不要です。
-OfficeCLI 1.0.148も本体に同梱し、`& $env:M365_RELAY_OFFICECLI --help`で利用できます。OfficeCLI自身の自動更新・自動常駐は無効にし、M365Relayと一緒に更新します。Word・Excel・PowerPointの処理候補として利用できますが、複雑な文書の互換性は検証中です。
-文字PDFの読取にはLiteParse 2.14.4を同梱します。`& $env:M365_RELAY_NODE $env:M365_RELAY_PDF input.pdf output.json "1-5,8"`でページ・座標付き原文とMarkdownを新規JSONへ保存します。ページ範囲は省略可能です。OCRは無効で、スキャンPDFの文字認識は未対応です。表の対応はMarkdownだけでなく位置付き原文で確認する必要があります。
+文書処理には小型のPython 3.13.15とopenpyxl・pypdf・pypdfium2・Pillowを同梱します。pipや別のPythonのインストールは不要です。`& $env:M365_RELAY_PYTHON -I -B $env:M365_RELAY_DOCUMENTS --help`で文書コマンドを確認できます。OfficeCLIとLiteParseは配布に含めません。
+文字PDFは`& $env:M365_RELAY_NODE $env:M365_RELAY_PDF input.pdf output.json "1-5,8"`でページ・文字座標・抽出テキストを新規JSONへ保存します。ページ範囲は省略可能です。PythonからPDF→PNGの描画も可能です。OCRは含みません。Excelの作成/読取はopenpyxl、数式再計算とOffice→PDF、Word/PowerPointの作成はインストール済みデスクトップ版Officeを利用します。
 解析結果の`selectionComplete`は指定ページが揃ったかを示し、文字認識や表の正確性の保証ではありません。文字が取れなかったページは`pagesWithoutText`と警告に明示します。空白ページとスキャンページはこの検査だけでは区別しません。
 モデル選択にAutoしか表示されない場合は、Manage Modelsを一度開いてからM365Relayを選びます。
 既存フォルダーで始めるには、そのフォルダーをRun.cmdへドラッグするか、VS Codeで「フォルダーを開く」を選びます。
@@ -118,7 +118,7 @@ M365はJSON内のWindowsパス、ターミナルコマンド、長い自然文�
 受信した会話履歴の最後のuserメッセージ以降に残る呼び出しを数え、全ツール12回、`run_in_terminal`3回に達すると次の呼び出しを`tool_loop_detected`で拒否します。会話圧縮で消えた呼び出しは数えられないため、長い作業全体の通算上限ではありません。
 新しいユーザー要求ではカウンタをリセットします。
 
-M365向けプロンプトにも、Python・pypdf・PyMuPDF・pdftotext等を存在前提にしないこと、失敗した同じ依存関係を言い換えて繰り返さないことを明記しています。
+M365向けプロンプトは同梱Pythonの明示パスを案内します。追加パッケージを存在前提にせず、失敗した依存関係を言い換えて繰り返さない方針を維持します。
 PDFを`read_file`した結果がバイナリだった場合、それだけで本文を読めたとは扱いません。
 
 ### 診断
@@ -146,7 +146,7 @@ PNG/JPEGの画像入力は、data URLを検証してCopilotへ画像添付とし
 ツール引数はVS Codeから渡されたSchemaで検証し、未定義ツール・不正な引数を推測で実行しません。
 送信済み・結果不明の同一要求は自動再送しません。業務操作の厳密なexactly-once保証ではありません。
 
-PDF本文の抽出能力はVS Code側で利用可能なツールに依存します。M365RelayはPythonやPDFライブラリを同梱せず、勝手に外部ソフトをインストールしません。
+PDF読取は同梱Pythonの文書コマンドを使用します。スキャンPDFのOCR、複雑な表の自動構造化は保証しません。抽出結果と描画を照合します。
 
 ## 開発・検証
 

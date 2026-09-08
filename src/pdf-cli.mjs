@@ -3,7 +3,7 @@ import {fileURLToPath} from 'node:url';
 import {stat,lstat} from 'node:fs/promises';
 import {publishPdfOutput} from './pdf-output.mjs';
 import {parsePdfPageRanges} from './pdf-result.mjs';
-import {runPdfWorker} from './pdf-process.mjs';
+import {runPythonWorker} from './pdf-process.mjs';
 
 const args=process.argv.slice(2);
 if(args.length<2||args.length>3){console.error('Usage: pdf-cli.mjs input.pdf output.json [pages: 1-5,8]');process.exitCode=1;}
@@ -18,7 +18,7 @@ else {
   parsePdfPageRanges(pages);
   if(!(await stat(input)).isFile())throw Error('Input is not a file.');
   try{await lstat(output);throw Object.assign(Error('Output exists'),{code:'EEXIST'});}catch(e){if(e.code!=='ENOENT')throw e;}
-  const serialized=await runPdfWorker(fileURLToPath(new URL('./pdf-worker.mjs',import.meta.url)),[input,...(pages?[pages]:[])],{signal:controller.signal});
+  const serialized=await runPythonWorker(fileURLToPath(new URL('../runtime/python/python.exe',import.meta.url)),fileURLToPath(new URL('../python/document_runtime.py',import.meta.url)),['pdf-read',input,...(pages?['--pages',pages]:[])],{signal:controller.signal});
   const out=JSON.parse(serialized);
   await publishPdfOutput(output,serialized,controller.signal);
   console.log(JSON.stringify({output,pages:out.pages.length,totalPages:out.totalPages,ocrEnabled:false,selectionComplete:out.selectionComplete,parsedPageNumbers:out.parsedPageNumbers,pagesWithoutText:out.pagesWithoutText,warnings:out.warnings}));

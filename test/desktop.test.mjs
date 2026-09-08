@@ -112,15 +112,15 @@ test('profile launch path is physical so restarts keep the same history director
  assert.equal(captured[captured.indexOf('--user-data-dir')+1],await realpath(actual));
 });
 
-test('bundled OfficeCLI is exposed without changing global PATH or other terminal preferences',async t=>{
+test('bundled Python is exposed without changing global PATH or other terminal preferences',async t=>{
  const c=await fixture(t),runtime=join(c.home,'runtime');
- await mkdir(join(runtime,'officecli'),{recursive:true});
+ await mkdir(join(runtime,'python'),{recursive:true});
  await writeFile(join(runtime,'node.exe'),'runtime fixture');
- await writeFile(join(runtime,'officecli','officecli.exe'),'office fixture');
+ await writeFile(join(runtime,'python','python.exe'),'python fixture');
  const plan=await prepareDesktop(c,{runtimeExecutable:join(runtime,'node.exe'),executable:'Code.exe'});
  const settings=JSON.parse(await readFile(join(plan.userDataDir,'User','settings.json'),'utf8'));
  const env=settings['terminal.integrated.env.windows'];
- assert.equal(env.M365_RELAY_OFFICECLI,await realpath(join(runtime,'officecli','officecli.exe')));
- assert.equal(env.OFFICECLI_SKIP_UPDATE,'1');assert.equal(env.OFFICECLI_NO_AUTO_RESIDENT,'1');
+ assert.equal(env.M365_RELAY_PYTHON,await realpath(join(runtime,'python','python.exe')));
+ assert.equal(env.M365_RELAY_OFFICECLI,undefined);assert.match(env.M365_RELAY_DOCUMENTS,/document_runtime.py$/);
  assert(!Object.keys(env).some(k=>k.toLowerCase()==='path'));
 });

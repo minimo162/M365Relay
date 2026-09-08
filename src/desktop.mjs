@@ -36,9 +36,10 @@ export async function findVSCode({env=process.env,exists=access}={}){
 export async function prepareDesktop(config,{workspace,executable,resolveRealPath=realpath,runtimeExecutable=process.execPath}={}){
  runtimeExecutable=await realpath(runtimeExecutable);
  const pdfCommand=await realpath(fileURLToPath(new URL('./pdf-cli.mjs',import.meta.url)));
- let officeExecutable;
- const officeCandidate=join(dirname(runtimeExecutable),'officecli','officecli.exe');
- try{officeExecutable=await realpath(officeCandidate);}catch(error){if(error.code!=='ENOENT')throw error;}
+ let pythonExecutable;
+ const pythonCandidate=join(dirname(runtimeExecutable),'python','python.exe');
+ try{pythonExecutable=await realpath(pythonCandidate);}catch(error){if(error.code!=='ENOENT')throw error;}
+ const documentCommand=fileURLToPath(new URL('../python/document_runtime.py',import.meta.url));
  // This is a dedicated --user-data-dir, not the user's normal VS Code profile.
  const userDataDir=join(config.home,'vscode-data');
  const userDir=join(userDataDir,'User');
@@ -82,6 +83,8 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
   settings??={};assert(isObject(settings),'invalid_desktop_config','専用VS Codeの設定を読み取れません。');
   const terminalEnv=settings['terminal.integrated.env.windows']??{};
   assert(isObject(terminalEnv),'invalid_desktop_config','専用VS Codeの端末環境設定を読み取れません。');
+  const migratedEnv={...terminalEnv};
+  for(const name of ['M365_RELAY_OFFICECLI','OFFICECLI_SKIP_UPDATE','OFFICECLI_NO_AUTO_RESIDENT','OFFICECLI_RESIDENT_FLUSH'])delete migratedEnv[name];
   // Small utility calls prewarm decorative progress phrases at extension start.
   // Do not put them ahead of actual work on the single M365 UI connection. Keep
   // the full utility model for features such as applying edits; no extra API.
@@ -94,8 +97,8 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
     'chat.viewSessions.enabled':true,'chat.viewSessions.orientation':'sideBySide',
     'security.workspace.trust.enabled':false,
     'chat.permissions.default':'autopilot',
-    'terminal.integrated.env.windows':{...terminalEnv,M365_RELAY_NODE:runtimeExecutable,M365_RELAY_PDF:pdfCommand,
-      ...(officeExecutable?{M365_RELAY_OFFICECLI:officeExecutable,OFFICECLI_SKIP_UPDATE:'1',OFFICECLI_NO_AUTO_RESIDENT:'1',OFFICECLI_RESIDENT_FLUSH:'each'}:{})}};
+    'terminal.integrated.env.windows':{...migratedEnv,M365_RELAY_NODE:runtimeExecutable,M365_RELAY_PDF:pdfCommand,
+      ...(pythonExecutable?{M365_RELAY_PYTHON:pythonExecutable,M365_RELAY_DOCUMENTS:documentCommand}:{})}};
  });
  // Pin the actual profile directory as well as the workspace. Packaged Windows
  // launchers may redirect AppData; a VS Code self-restart can otherwise resolve
@@ -104,7 +107,7 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
  try{actualUserDataDir=await realpath(userDataDir);}catch{
   throw new BridgeError('profile_resolution_failed','専用VS Code設定の実際の保存先を確認できません。起動せず停止しました。',400);
  }
- return {executable,userDataDir:actualUserDataDir,workspace:actualFolder,runtimeExecutable,officeExecutable,pdfCommand};
+ return {executable,userDataDir:actualUserDataDir,workspace:actualFolder,runtimeExecutable,pythonExecutable,documentCommand,pdfCommand};
 }
 
 export async function launchDesktop(plan,{spawnProcess=spawn}={}){
@@ -113,7 +116,10 @@ export async function launchDesktop(plan,{spawnProcess=spawn}={}){
  for(const name of ['ELECTRON_RUN_AS_NODE','VSCODE_IPC_HOOK_CLI','NODE_OPTIONS','NODE_PATH'])delete env[name];
  if(plan.runtimeExecutable)env.M365_RELAY_NODE=plan.runtimeExecutable;
  if(plan.pdfCommand)env.M365_RELAY_PDF=plan.pdfCommand;
- if(plan.officeExecutable)Object.assign(env,{M365_RELAY_OFFICECLI:plan.officeExecutable,OFFICECLI_SKIP_UPDATE:'1',OFFICECLI_NO_AUTO_RESIDENT:'1',OFFICECLI_RESIDENT_FLUSH:'each'});
+ if(plan.pythonExecutable){
+  for(const name of ['M365_RELAY_OFFICECLI','OFFICECLI_SKIP_UPDATE','OFFICECLI_NO_AUTO_RESIDENT','OFFICECLI_RESIDENT_FLUSH'])delete env[name];
+  Object.assign(env,{M365_RELAY_PYTHON:plan.pythonExecutable,M365_RELAY_DOCUMENTS:plan.documentCommand});
+ }
  const child=spawnProcess(plan.executable,['--user-data-dir',plan.userDataDir,'--new-window',plan.workspace],
   {detached:true,stdio:'ignore',shell:false,env});
  await once(child,'spawn');child.unref();

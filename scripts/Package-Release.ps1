@@ -1,6 +1,6 @@
 # Build on Windows PowerShell 5.1+; no installed Node.js or npm is required.
 [CmdletBinding()]
-param([string]$NodeArchive, [string]$OutputDirectory, [string]$OfficeCliDirectory)
+param([string]$NodeArchive, [string]$OutputDirectory, [string]$PythonCacheDirectory)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version 2.0
@@ -43,32 +43,8 @@ try {
     $env:NODE_OPTIONS = $null; $env:NODE_PATH = $null
     $actualVersion = & (Join-Path $runtime 'node.exe') --version
     if ($LASTEXITCODE -ne 0 -or $actualVersion -cne "v$($lock.version)") { throw 'Bundled runtime version check failed.' }
-    & (Join-Path $PSScriptRoot 'Prepare-OfficeRuntime.ps1') -Destination (Join-Path $runtime 'officecli') -SourceDirectory $OfficeCliDirectory
-    # Use npm from the checksum-verified official Node archive only at build time.
-    $buildNpm = Join-Path $work 'build-npm'
-    $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $NodeArchive).Path)
-    try {
-        foreach($entry in $archive.Entries) {
-            $npmPrefix = "$prefix/node_modules/npm/"
-            if (-not $entry.FullName.StartsWith($npmPrefix) -or $entry.FullName.EndsWith('/')) { continue }
-            $target = [IO.Path]::GetFullPath((Join-Path $buildNpm $entry.FullName.Substring($npmPrefix.Length)))
-            if (-not $target.StartsWith($buildNpm+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid npm archive path.' }
-            New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($target)) | Out-Null
-            [IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$target,$false)
-        }
-    } finally { $archive.Dispose() }
-    $pdfRuntime=Join-Path $runtime 'liteparse'
-    New-Item -ItemType Directory -Path $pdfRuntime | Out-Null
-    Copy-Item -LiteralPath (Join-Path $root 'pdf-runtime/package.json'),(Join-Path $root 'pdf-runtime/package-lock.json') -Destination $pdfRuntime
-    & (Join-Path $runtime 'node.exe') (Join-Path $buildNpm 'bin/npm-cli.js') ci --prefix $pdfRuntime --omit=dev --ignore-scripts --no-audit --no-fund --bin-links=false
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $pdfRuntime 'node_modules/@llamaindex/liteparse-win32-x64-msvc/pdfium.dll'))) { throw 'Pinned PDF runtime installation failed.' }
-    # The top-level npm tarball also contains Linux artifacts; Windows uses its
-    # exact optional platform package. No generic recursive pruning is used.
-    foreach($unused in @('libpdfium.so','liteparse.linux-x64-gnu.node')) {
-        $unusedPath=Join-Path $pdfRuntime ('node_modules/@llamaindex/liteparse/'+$unused)
-        if (Test-Path -LiteralPath $unusedPath) { Remove-Item -LiteralPath $unusedPath -Force }
-    }
-    Copy-Item -LiteralPath (Join-Path $root 'third_party/liteparse') -Destination (Join-Path $pdfRuntime 'notices') -Recurse
+    & (Join-Path $PSScriptRoot 'Prepare-PythonRuntime.ps1') -Destination (Join-Path $runtime 'python') -CacheDirectory $PythonCacheDirectory
+    Copy-Item -LiteralPath (Join-Path $root 'python') -Destination (Join-Path $stage 'python') -Recurse
     # Curated distribution: never copy local settings, tokens, profiles, logs or npm.
     foreach ($relative in @('src','prompts','config','README.md','THIRD_PARTY.md','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd','Open-Copilot.cmd','Start-Bridge.cmd','package.json')) {
         if ($relative -in @('src','prompts','config')) {
@@ -78,11 +54,11 @@ try {
         } else { Copy-Item -LiteralPath (Join-Path $root $relative) -Destination (Join-Path $stage $relative) }
     }
     Copy-Item -LiteralPath (Join-Path $root 'config\node-runtime.lock.json') -Destination (Join-Path $stage 'config')
-    Copy-Item -LiteralPath (Join-Path $root 'config\officecli-runtime.lock.json') -Destination (Join-Path $stage 'config')
+    Copy-Item -LiteralPath (Join-Path $root 'config\python-runtime.lock.json') -Destination (Join-Path $stage 'config')
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'scripts')
     foreach ($name in @('Launch.ps1','Verify-Distribution.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $stage 'scripts') }
     $null = New-Item -ItemType Directory -Path (Join-Path $stage 'docs')
-    foreach ($name in @('acceptance.md','architecture.md','distribution.md','auto-update.md','test-results.md','sources.md','schema-compatibility.md','input-compatibility.md','dom-compatibility.md','release-notes.md')) { Copy-Item -LiteralPath (Join-Path $root "docs\$name") -Destination (Join-Path $stage 'docs') }
+    foreach ($name in @('acceptance.md','architecture.md','distribution.md','auto-update.md','test-results.md','sources.md','schema-compatibility.md','input-compatibility.md','dom-compatibility.md','release-notes.md','python-runtime.md')) { Copy-Item -LiteralPath (Join-Path $root "docs\$name") -Destination (Join-Path $stage 'docs') }
     $files = @(Get-ChildItem -LiteralPath $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
         [ordered]@{ path = $_.FullName.Substring($stage.Length + 1).Replace('\','/'); sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     })

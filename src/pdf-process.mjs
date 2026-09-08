@@ -1,4 +1,22 @@
-import {fork} from 'node:child_process';
+import {fork,spawn} from 'node:child_process';
+
+export function runPythonWorker(executable,script,args,{timeoutMs=120000,signal}={}){
+ if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>300000)throw Error('Invalid PDF timeout');
+ return new Promise((resolve,reject)=>{
+  if(signal?.aborted){reject(Object.assign(Error('PDF cancelled'),{code:'PDF_CANCELLED'}));return;}
+  const child=spawn(executable,['-I','-B',script,...args],{stdio:['ignore','pipe','ignore'],windowsHide:true,env:{...process.env,PYTHONHOME:'',PYTHONPATH:''}});
+  let failure,size=0;const chunks=[];
+  const fail=code=>{failure??=Object.assign(Error(code),{code});child.kill();};
+  const timer=setTimeout(()=>fail('PDF_TIMEOUT'),timeoutMs);
+  const abort=()=>fail('PDF_CANCELLED');signal?.addEventListener('abort',abort,{once:true});
+  child.stdout.on('data',chunk=>{size+=chunk.length;if(size>32*1024*1024)fail('PDF_INVALID_RESULT');else chunks.push(chunk);});
+  child.on('error',()=>{failure??=Object.assign(Error('Python worker failed'),{code:'PDF_WORKER_FAILED'});});
+  child.on('close',code=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);
+   if(failure)reject(failure);else if(code!==0||size===0)reject(Object.assign(Error('Python parser failed'),{code:'PDF_WORKER_FAILED'}));
+   else resolve(Buffer.concat(chunks).toString('utf8'));
+  });
+ });
+}
 
 // Native parser crashes and synchronous hangs must not disable the supervisor.
 export function runPdfWorker(workerPath,args,{timeoutMs=120000,signal}={}){

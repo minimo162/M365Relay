@@ -44,6 +44,11 @@ try {
     $env:NODE_OPTIONS=$null
     & (Join-Path $app 'runtime\node.exe') (Join-Path $PSScriptRoot 'verify-document-runtime.mjs') $app $temp
     if ($LASTEXITCODE -ne 0) { throw 'Bundled document runtime verification failed.' }; $checks++
+    $python = Join-Path $app 'runtime\python\python.exe'
+    Move-Item -LiteralPath $python -Destination "$python.saved"
+    & $bridge help
+    if ($LASTEXITCODE -eq 0) { throw 'Missing bundled Python was accepted.' }; $checks++
+    Move-Item -LiteralPath "$python.saved" -Destination $python
     $env:NODE_OPTIONS='--definitely-invalid-inherited-option'
     # Deliberately remove the runtime. A global fallback must never succeed.
     $node = Join-Path $app 'runtime\node.exe'
