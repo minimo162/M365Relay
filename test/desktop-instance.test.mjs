@@ -35,6 +35,15 @@ test('missing readiness, dead process, and fake proof cannot reopen',async t=>{
  await s.register();await assert.rejects(existingDesktopPlan(s.config,{alive(){throw Error('dead');}}),{code:'instance_unverifiable'});
  await assert.rejects(existingDesktopPlan(s.config,{fetchImpl:async()=>new Response(JSON.stringify({proof:'0'.repeat(64)}))}),{code:'instance_unverifiable'});
 });
+
+test('reopen uses the authenticated snapshot port after automatic selection',async t=>{
+ const s=await setup(t);s.plan.port=s.config.port;await s.register();
+ const config={...s.config,port:s.config.port===8731?8732:8731};
+ assert.deepEqual(await existingDesktopPlan(config),s.plan);
+ const path=join(s.home,'bridge.lock','desktop.json');
+ const meta=JSON.parse(await readFile(path));meta.plan.port=80;await writeFile(path,JSON.stringify(meta));
+ await assert.rejects(existingDesktopPlan(config,{fetchImpl:()=>{throw Error('must not fetch invalid port');}}),{code:'instance_unverifiable'});
+});
 test('proof cannot be replayed with a different nonce or local snapshot',async t=>{
  const s=await setup(t);await s.register();let old;
  await existingDesktopPlan(s.config,{fetchImpl:async(url,o)=>{const r=await fetch(url,o);old=await r.clone().text();return r;}});

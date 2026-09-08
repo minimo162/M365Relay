@@ -107,7 +107,7 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
  try{actualUserDataDir=await realpath(userDataDir);}catch{
   throw new BridgeError('profile_resolution_failed','専用VS Code設定の実際の保存先を確認できません。起動せず停止しました。',400);
  }
- return {executable,userDataDir:actualUserDataDir,workspace:actualFolder,runtimeExecutable,pythonExecutable,documentCommand,pdfCommand};
+ return {executable,userDataDir:actualUserDataDir,workspace:actualFolder,runtimeExecutable,pythonExecutable,documentCommand,pdfCommand,port:config.port};
 }
 
 export async function launchDesktop(plan,{spawnProcess=spawn}={}){
