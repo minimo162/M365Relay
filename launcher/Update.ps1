@@ -10,10 +10,10 @@ function Read-Json([string]$Path) {
     if ((Get-Item -LiteralPath $Path).Length -gt 4194304) { throw 'Metadata is too large.' }
     Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
 }
-function Get-ContentFile([string]$From, [string]$To) {
+function Get-ContentFile([string]$From, [string]$To, [int]$TimeoutSeconds) {
     if ($From -match '^https://') {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -UseBasicParsing -Uri $From -OutFile $To -TimeoutSec 90
+        Invoke-WebRequest -UseBasicParsing -Uri $From -OutFile $To -TimeoutSec $TimeoutSeconds
     } elseif ($From -match '^\w+://') { throw 'Only HTTPS or a shared/local path is supported.' }
     else { Copy-Item -LiteralPath $From -Destination $To }
 }
@@ -101,7 +101,7 @@ try {
         $attempt = Join-Path $apps ('download-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $attempt | Out-Null
         $metadata = Join-Path $attempt 'update.json'
-        Get-ContentFile $Source $metadata
+        Get-ContentFile $Source $metadata 10
         $channel = Read-Json $metadata; Assert-Channel $channel
         $id = $channel.revision + '-' + $channel.sha256.Substring(0,12)
         $destination = Join-Path $versions $id
@@ -109,7 +109,7 @@ try {
             Write-Host ('本体を取得しています: ' + $channel.version)
             $archiveSource = if ($Source -match '^https://') { (New-Object Uri((New-Object Uri($Source)), [string]$channel.archive)).AbsoluteUri } else { Join-Path (Split-Path -Parent $Source) $channel.archive }
             $archive = Join-Path $attempt 'app.zip'
-            Get-ContentFile $archiveSource $archive
+            Get-ContentFile $archiveSource $archive 180
             if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $channel.sha256) { throw 'Downloaded archive checksum mismatch.' }
             $stage = Join-Path $attempt 'unpacked'; New-Item -ItemType Directory -Path $stage | Out-Null
             Expand-CheckedZip $archive $stage
