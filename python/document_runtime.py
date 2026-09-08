@@ -57,12 +57,14 @@ def selected_pages(spec, total):
     return sorted(pages)
 
 
-def pdf_read(path, selection):
+def pdf_read(path, selection, text_only=False):
     import pypdfium2 as pdfium
     import pypdfium2.raw as raw
     result = []
     with closing(pdfium.PdfDocument(path)) as pdf:
         total = len(pdf)
+        if text_only and selection is None:
+            selection = f"1-{min(5, total)}" if total else None
         for number in selected_pages(selection, total):
             with closing(pdf[number - 1]) as page:
                 width, height = page.get_size()
@@ -70,7 +72,7 @@ def pdf_read(path, selection):
                     items = []
                     # PDFium character bounds are authoritative geometry. Do
                     # not invent table cells or estimate boxes from text length.
-                    for i in range(textpage.count_chars()):
+                    for i in range(0 if text_only else textpage.count_chars()):
                         code = raw.FPDFText_GetUnicode(textpage, i)
                         if not code:
                             continue
@@ -84,6 +86,13 @@ def pdf_read(path, selection):
                     result.append(dict(pageNum=number, width=width, height=height,
                                        text=textpage.get_text_range(), textItems=items))
     textless = [p["pageNum"] for p in result if not p["text"].strip()]
+    if text_only:
+        pages = [dict(pageNum=p["pageNum"], text=p["text"]) for p in result]
+        return dict(schema="m365-relay-pdf-text-v1", totalPages=total,
+                    parsedPageNumbers=[p["pageNum"] for p in pages],
+                    documentComplete=len(pages) == total, pages=pages,
+                    pagesWithoutText=textless, ocrEnabled=False,
+                    notice="Only listed pages were read. Text follows PDF reading order; table layout is not reconstructed. Empty text does not prove a blank page.")
     return dict(schema="m365-relay-pdf-v1", parser="pypdfium2", parserVersion=str(pdfium.PYPDFIUM_INFO),
                 ocrEnabled=False, totalPages=total, selectionComplete=True,
                 parsedPageNumbers=[p["pageNum"] for p in result], pagesWithoutText=textless,
@@ -303,6 +312,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("pdf-read"); p.add_argument("input"); p.add_argument("output", nargs="?"); p.add_argument("--pages")
+    p = sub.add_parser("pdf-text", help="Read text without coordinates; defaults to first 5 pages"); p.add_argument("input"); p.add_argument("--pages")
     p = sub.add_parser("pdf-render"); p.add_argument("input"); p.add_argument("output"); p.add_argument("--page", type=int, default=1); p.add_argument("--scale", type=float, default=1.5)
     p = sub.add_parser("xlsx-create"); p.add_argument("output"); p.add_argument("data")
     for command in ("xlsx-read", "office-text"):
@@ -310,7 +320,11 @@ def main():
     for command in ("office-pdf", "xlsx-recalculate", "docx-create", "pptx-create"):
         p = sub.add_parser(command); p.add_argument("input"); p.add_argument("output")
     a = parser.parse_args()
-    if a.command == "pdf-read":
+    if a.command == "pdf-text":
+        result = pdf_read(a.input, a.pages, text_only=True)
+        if sum(len(p["text"]) for p in result["pages"]) > 48000:
+            raise ValueError("Text exceeds 48000 characters; select fewer pages with --pages")
+    elif a.command == "pdf-read":
         result = pdf_read(a.input, a.pages)
         if a.output:
             data = encode_result(result)

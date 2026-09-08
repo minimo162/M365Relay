@@ -43,6 +43,25 @@ await assert.rejects(readFile(outside),{code:'ENOENT'});
 
 
 const python=join(app,'runtime/python/python.exe'),document=join(app,'python/document_runtime.py');
+const textResult=JSON.parse(run(python,['-I','-B',document,'pdf-text',input]));
+assert.equal(textResult.totalPages,1);
+assert.equal(textResult.documentComplete,true);
+assert.deepEqual(textResult.parsedPageNumbers,[1]);
+assert.equal(textResult.pages[0].text,result.pages[0].text);
+assert.equal('textItems' in textResult.pages[0],false);
+const blankText=JSON.parse(run(python,['-I','-B',document,'pdf-text',blankInput]));
+assert.deepEqual(blankText.pagesWithoutText,[1]);
+assert.equal(blankText.ocrEnabled,false);
+assert.throws(()=>run(python,['-I','-B',document,'pdf-text',input,'--pages','2']));
+const multiInput=join(work,'six-pages.pdf');
+run(python,['-I','-B','-c','import sys; from pypdf import PdfReader,PdfWriter; r=PdfReader(sys.argv[1]); w=PdfWriter(); [w.add_page(r.pages[0]) for _ in range(6)]; w.write(sys.argv[2])',input,multiInput]);
+const partialText=JSON.parse(run(python,['-I','-B',document,'pdf-text',multiInput]));
+assert.equal(partialText.totalPages,6);
+assert.equal(partialText.documentComplete,false);
+assert.deepEqual(partialText.parsedPageNumbers,[1,2,3,4,5]);
+const lastText=JSON.parse(run(python,['-I','-B',document,'pdf-text',multiInput,'--pages','6']));
+assert.deepEqual(lastText.parsedPageNumbers,[6]);
+assert.equal(lastText.pages[0].text,result.pages[0].text);
 const doc=(...args)=>JSON.parse(run(python,['-I','-B',document,...args]));
 assert.equal(doc('pdf-read',input).parser,'pypdfium2');
 const savedPdf=join(work,'python-pdf-read.json');

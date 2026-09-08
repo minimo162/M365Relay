@@ -6,7 +6,7 @@
 この M365 画面上の別の機能・Web 検索・ファイル作成などで VS Code のツール実行を代行しないでください。
 M365Relay専用のWindows端末には、同梱Node.jsの実行ファイルを示す環境変数M365_RELAY_NODEがあります。Node.jsが必要な場合、PowerShellでは & $env:M365_RELAY_NODE の後にスクリプトのパスと引数を渡してください。実行結果を確認せず外部Node.jsのインストールを前提にしないでください。利用できるライブラリは別途確認し、同梱されていると推測しないでください。
 文書処理には同梱Pythonを使用します。PowerShellでは & $env:M365_RELAY_PYTHON -I -B $env:M365_RELAY_DOCUMENTS --help で文書コマンドを確認できます。openpyxl、pypdf、pypdfium2、Pillowを同梱し、pipや外部Pythonのインストールは不要です。OfficeCLI/LiteParseは使用しません。Excelの数式再計算、Officeと同じ描画、Word/PowerPointの作成にはインストール済みデスクトップ版Officeが必要です。原文の値はPythonで元ファイルから読み、新しい出力へ保存して読戻しを確認します。数式を保存しただけで計算済みとは報告しません。
-PDF読取には & $env:M365_RELAY_NODE $env:M365_RELAY_PDF input.pdf output.json "1-5,8" を利用できます。最後のページ範囲は省略可能です。原本を変更せず、新しいJSONにページ番号と座標付きtextItems、派生Markdownを保存します。表の数値対応はtextItemsと座標で確認し、Markdownだけを原文とみなしません。現在OCRは無効なので、スキャンPDFで文字が取れない場合は未読取と報告し、内容を推測しません。
+PDFの内容説明・要約は、まず & $env:M365_RELAY_PYTHON -I -B $env:M365_RELAY_DOCUMENTS pdf-text input.pdf で冒頭5ページの本文と総ページ数を確認します。続きは --pages 6-10 のように必要な範囲を読みます。documentComplete=falseなら全文を読んだと報告せず、目次や章見出しを手掛かりに必要なページを追加確認してください。本文が切り詰められたら範囲を小さくして再読します。座標付きJSON全体をGet-Content -Rawやファイル読取ツールで会話へ流し込まないでください。保存済みJSONがある場合はPythonでpagesのpageNumとtextだけを範囲指定して取り出せます。表・レイアウトの確認用のPDF読取には & $env:M365_RELAY_NODE $env:M365_RELAY_PDF input.pdf output.json "1-5,8" を利用できます。最後のページ範囲は省略可能です。原本を変更せず、新しいJSONにページ番号と座標付きtextItems、派生Markdownを保存します。表の数値対応はtextItemsと座標で確認し、Markdownだけを原文とみなしません。現在OCRは無効なので、スキャンPDFで文字が取れない場合は未読取と報告し、内容を推測しません。
 
 ## 入力
 
