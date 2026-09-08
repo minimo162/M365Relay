@@ -71,7 +71,9 @@ Copy-Item -LiteralPath $unsafeZip -Destination $archivePath -Force
 $channel.sha256=(Get-FileHash $unsafeZip).Hash.ToLowerInvariant()
 $channel | ConvertTo-Json | Set-Content -LiteralPath $source -Encoding UTF8
 Run-Update
-if ([IO.File]::ReadAllText($currentPath) -cne $secondBytes -or (Get-ChildItem -LiteralPath $trial -Recurse -Filter outside.txt)) { throw 'Unsafe archive escaped or activated.' }; $count++
+$nativeTrial = if ($trial.StartsWith('\\')) { '\\?\UNC\' + $trial.Substring(2) } else { '\\?\' + $trial }
+$escapedFiles = @([IO.Directory]::EnumerateFiles($nativeTrial, 'outside.txt', [IO.SearchOption]::AllDirectories))
+if ([IO.File]::ReadAllText($currentPath) -cne $secondBytes -or $escapedFiles.Count) { throw 'Unsafe archive escaped or activated.' }; $count++
 Copy-Item -LiteralPath ($archivePath+'.saved') -Destination $archivePath -Force
 # Simulate a corrupt release with a different digest so it cannot hit cache.
 $bad=$metadata | ConvertFrom-Json; $bad.sha256='0'*64

@@ -18,10 +18,14 @@ foreach ($entry in $files) {
     $seen[$relative] = $true
     if ([string]$entry.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid manifest hash.' }
     $path = Join-Path $root $relative
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing distribution file: $relative" }
-    $item = Get-Item -LiteralPath $path
-    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Linked distribution files are not supported.' }
-    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $entry.sha256) { throw "Distribution hash mismatch: $relative" }
+    $nativePath = if ($path.StartsWith('\\')) { '\\?\UNC\' + $path.Substring(2) } else { '\\?\' + $path }
+    if (-not [IO.File]::Exists($nativePath)) { throw "Missing distribution file: $relative" }
+    if (([IO.File]::GetAttributes($nativePath) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Linked distribution files are not supported.' }
+    $stream = [IO.File]::OpenRead($nativePath)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try { $digest = ([BitConverter]::ToString($hasher.ComputeHash($stream))).Replace('-','').ToLowerInvariant() }
+    finally { $stream.Dispose(); $hasher.Dispose() }
+    if ($digest -cne $entry.sha256) { throw "Distribution hash mismatch: $relative" }
 }
 foreach ($required in @('runtime/node.exe','runtime/LICENSE','src/cli.mjs','src/desktop.mjs','src/run-log.mjs','src/model-selection.mjs','config/node-runtime.lock.json','prompts/m365-tool-router.md','scripts/Launch.ps1','scripts/Verify-Distribution.ps1','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd')) {
     if (-not $seen.ContainsKey($required)) { throw "Required manifest entry missing: $required" }

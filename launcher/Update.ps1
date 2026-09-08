@@ -41,8 +41,13 @@ function Assert-LocalApp([string]$Directory, $Channel) {
             @($relative.Split('/') | Where-Object { $_ -eq '..' -or $_ -eq '.' -or $_ -eq '' }).Count -gt 0 -or $seen.ContainsKey($relative)) { throw 'Invalid local manifest path.' }
         $seen[$relative] = $true
         $file = Join-Path $Directory $relative
-        $item = Get-Item -LiteralPath $file
-        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -cne $entry.sha256) { throw 'Local application checksum mismatch.' }
+        $nativeFile = if ($file.StartsWith('\\')) { '\\?\UNC\' + $file.Substring(2) } else { '\\?\' + $file }
+        if (([IO.File]::GetAttributes($nativeFile) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Linked application file.' }
+        $stream = [IO.File]::OpenRead($nativeFile)
+        $hasher = [Security.Cryptography.SHA256]::Create()
+        try { $digest = ([BitConverter]::ToString($hasher.ComputeHash($stream))).Replace('-','').ToLowerInvariant() }
+        finally { $stream.Dispose(); $hasher.Dispose() }
+        if ($digest -cne $entry.sha256) { throw 'Local application checksum mismatch.' }
     }
     foreach ($required in @('runtime/node.exe','src/cli.mjs','scripts/Launch.ps1','scripts/Verify-Distribution.ps1')) {
         if (-not $seen.ContainsKey($required)) { throw 'Required application file missing.' }
@@ -69,7 +74,10 @@ function Expand-CheckedZip([string]$ZipPath, [string]$Destination) {
             if ($entry.FullName.EndsWith('/')) { New-Item -ItemType Directory -Force -Path $target | Out-Null }
             else {
                 New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($target)) | Out-Null
-                [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $false)
+                # .NET Framework ZIP extraction uses legacy MAX_PATH unless the
+                # already-normalized, scope-checked path uses extended syntax.
+                $nativeTarget = if ($target.StartsWith('\\')) { '\\?\UNC\' + $target.Substring(2) } else { '\\?\' + $target }
+                [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $nativeTarget, $false)
             }
         }
     } finally { $zip.Dispose() }
