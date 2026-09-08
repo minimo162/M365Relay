@@ -11,7 +11,7 @@ M365 Copilotの判断を、VS Codeの実行につなぐローカル接続アダ�
 ## 役割
 
 ```text
-VS Code Local / Agent（対話・標準ツール・承認）
+VS Code Local / Agent（対話・標準ツール・権限管理）
   → POST /v1/chat/completions
   → M365Relay（会話・ツール定義をプロンプトへ変換）
   → 専用EdgeのM365 Copilot（次のツール名・引数または最終回答を返す）
@@ -20,7 +20,7 @@ VS Code Local / Agent（対話・標準ツール・承認）
 ```
 
 ツール名を固定せず、VS Codeが今回渡した定義を使います。1回答1ツールです。
-M365Relay自身は業務ツールを実行せず、VS Codeの標準ツール実行と承認を維持します。
+M365Relay自身は業務ツールを実行せず、VS Codeの標準ツール実行と権限管理を利用します。
 各要求を専用タブの新しい会話で処理し、VS Codeから受け取った履歴を毎回渡します。
 
 ## 利用者に必要なもの
@@ -57,12 +57,12 @@ GitHubのCode → Download ZIP / Source code (zip)はNode.jsを含まないた�
 
 1. `Run.cmd`を開きます。設定・接続キー・専用VS Code設定を自動で作成し、EdgeとVS Codeを起動します。
 2. 専用EdgeでM365へ手動サインインします。VS Codeの初回案内では「Continue without Signing In」を選べます。GitHubへのサインインは不要です。
-3. VS CodeのチャットでM365Relayを選び、依頼を入力します。エージェントの操作の承認は画面で確認します。
+3. VS CodeのチャットでM365Relayを選び、依頼を入力します。新しいチャットはAutopilot (Preview)が既定です。必要に応じて入力欄下の権限選択で切り替えます。
 
 Copilot側は、新しい会話を開くたびに`GPT 5.6 Think Deeper`を画面で選択し、選択状態を確認してから送信します。このモデルが利用できない場合は送信前に停止します。モデル変更による正確性・速度の改善は比較検証中です。
 
 接続キーのコピーやJSON編集は不要です。通常のVS Code設定は変更せず、M365Relay専用のユーザーデータを使います。
-専用VS Codeではワークスペース信頼を無効化して起動します。この専用環境で開くすべてのフォルダーが対象で、Restricted Modeによる制限はありません。エージェントの操作承認設定は変更しません。
+専用VS Codeではワークスペース信頼を無効化して起動します。この専用環境で開くすべてのフォルダーが対象で、Restricted Modeによる制限はありません。新しいチャットは、自動で操作を進めるAutopilot (Preview)を既定にします。承認画面が表示された場合は内容を確認してください。
 専用端末では`M365_RELAY_NODE`が本体に含まれるNode.jsを指します。PowerShellからは`& $env:M365_RELAY_NODE script.mjs`で利用でき、PC全体のPATH変更は不要です。
 文書処理には小型のPython 3.13.15とopenpyxl・pypdf・pypdfium2・Pillowを同梱します。pipや別のPythonのインストールは不要です。`& $env:M365_RELAY_PYTHON -I -B $env:M365_RELAY_DOCUMENTS --help`で文書コマンドを確認できます。OfficeCLIとLiteParseは配布に含めません。
 文字PDFは`& $env:M365_RELAY_NODE $env:M365_RELAY_PDF input.pdf output.json "1-5,8"`でページ・文字座標・抽出テキストを新規JSONへ保存します。ページ範囲は省略可能です。PythonからPDF→PNGの描画も可能です。OCRは含みません。Excelの作成/読取はopenpyxl、数式再計算とOffice→PDF、Word/PowerPointの作成はインストール済みデスクトップ版Officeを利用します。
