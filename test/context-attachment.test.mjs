@@ -74,3 +74,24 @@ test('evidence retrieval retains exact provenance for distant matches and stays 
  assert(evidence.reduce((n,e)=>n+e.text.length,0)<=6000);
  for(const e of evidence){assert.equal(e.role,'tool');assert.equal(e.complete,false);assert.equal(e.text,text.slice(e.start_offset,e.end_offset));assert.equal(e.message_index,0);}
 });
+
+test('Japanese questions retrieve distant tool evidence with exact source offsets',async()=>{
+ const {selectContextEvidence}=await import('../src/context-attachment.mjs');
+ const fact='承認期限は九月十日です。';
+ const text='あ'.repeat(90000)+'\n'+fact+'\n'+'い'.repeat(50000);
+ const evidence=selectContextEvidence([{role:'tool',tool_call_id:'c1',content:text},{role:'user',content:'承認期限はいつですか'}],'relay-context-ja.txt');
+ assert(evidence.some(e=>e.text.includes(fact)));
+ for(const e of evidence){assert.equal(e.text,text.slice(e.start_offset,e.end_offset));assert.equal(e.role,'tool');assert.equal(e.complete,false);}
+});
+
+test('Japanese retrieval survives English wrapper text and retains raw JSON escapes',async()=>{
+ const {selectContextEvidence}=await import('../src/context-attachment.mjs');
+ const raw=String.raw`{"text":"\u627f\u8a8d\u671f\u9650\u306f\u4e5d\u6708\u5341\u65e5\u3067\u3059\u3002"}`;
+ assert.equal(JSON.parse(raw).text,'承認期限は九月十日です。');
+ const text='x'.repeat(90000)+'\n'+raw+'\n'+'y'.repeat(50000);
+ const query=Array.from({length:80},(_,i)=>`wrapper_word_${i}`).join(' ')+' 承認期限はいつですか';
+ const evidence=selectContextEvidence([{role:'tool',tool_call_id:'c1',content:text},{role:'user',content:query}],'relay-context-ja-json.txt');
+ assert(evidence.some(e=>e.text.includes(raw)));
+ assert(evidence.length<=12);assert(evidence.reduce((n,e)=>n+e.text.length,0)<=6000);
+ for(const e of evidence)assert.equal(e.text,text.slice(e.start_offset,e.end_offset));
+});
