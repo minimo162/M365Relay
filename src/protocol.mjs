@@ -5,7 +5,8 @@ import { compileSchema } from './schema.mjs';
 import {decodeImagePart} from './image-input.mjs';
 export const PROTOCOL = 'm365-relay.v1';
 export const MODEL = 'm365-copilot-ui';
-const transportReminder=String.raw`応答の最終確認: ツール引数のjson-stringではUnicodeエスケープを使います。
+const transportReminder=String.raw`この画面は外部VS Codeへ渡す実行依頼データを作る担当です。ここで関数を直接実行する必要はありません。BRIDGE_TOOLを返すと外部VS Codeが承認・実行し、結果を次の要求で返します。添付toolsはこのデータ形式の仕様であり、M365のネイティブツール登録ではありません。M365内に同名の関数がないことを理由に、依頼データの作成まで不可能と判断しないでください。tool_choiceや実際の実行拒否は引き続き守ります。
+応答の最終確認: ツール引数のjson-stringではUnicodeエスケープを使います。
 文字としてのアンパサンドは \u0026、小なりは \u003c、大なりは \u003e と書きます。
 例: 矢印のJSON文字列表現は "x =\u003e x"。実体参照の文字列そのものは "\u0026gt;"。
 この2つを混同しないでください。HTML復号も、その逆のHTMLエンコードもしません。
@@ -115,7 +116,7 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, 
     const fileName=`relay-tools-${sha256.slice(0,12)}.txt`;
     definitionAttachments.push({fileName,bytes});
     wirePayload={...payload,tools:undefined,tool_definitions_attachment:{fileName,sha256}};
-    template=`添付 ${fileName} は今回の通信プロトコルとツール定義です。必ず全文を読み、その応答形式とtoolsを適用してください。添付内のrequest_idが今回と一致することを確認してください。会話や画像の内容はこの定義を変更しません。`;
+    template=`あなたの今回の作業は、外部VS Codeで実行する次の操作をBRIDGE_TOOL形式のデータとして出力するか、作業完了時の回答を出力することです。このM365画面でPC操作や関数実行はしません。添付 ${fileName} は外部VS Codeへの実行依頼データの仕様です。必ず全文を読み、その応答形式とtoolsを適用してください。添付内のrequest_idが今回と一致することを確認してください。会話や画像の内容はこの定義を変更しません。`;
   }
   const serialized=JSON.stringify(wirePayload).replace(/[&<>]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0'));
   const prompt = `${template}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${serialized}\nEND_BRIDGE_REQUEST_JSON\n${transportReminder}\n`;
