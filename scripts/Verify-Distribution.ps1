@@ -36,4 +36,7 @@ foreach($requiredPython in @('src/pdf-cli.mjs','src/pdf-process.mjs','src/pdf-ou
     if(-not $seen.ContainsKey($requiredPython)){throw "Python runtime manifest entry missing: $requiredPython"}
 }
 $pythonLock=Get-Content -Raw -Encoding UTF8 (Join-Path $root 'config/python-runtime.lock.json') | ConvertFrom-Json
+foreach($bootstrapFile in @('src/bootstrap.mjs','vscode-bootstrap/package.json','vscode-bootstrap/extension.cjs','vscode-bootstrap/first-run-model-setup.vsix')){
+    if(-not $seen.ContainsKey($bootstrapFile)){throw "Bootstrap manifest entry missing: $bootstrapFile"}
+}
 if((Get-FileHash (Join-Path $root 'runtime/python/python.exe')).Hash.ToLowerInvariant() -cne $pythonLock.executableSha256){throw 'Bundled Python does not match the pinned executable'}

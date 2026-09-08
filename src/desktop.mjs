@@ -42,7 +42,10 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
  const documentCommand=fileURLToPath(new URL('../python/document_runtime.py',import.meta.url));
  // This is a dedicated --user-data-dir, not the user's normal VS Code profile.
  const userDataDir=join(config.home,'vscode-data');
+ let newProfile=false;
+ try{await stat(userDataDir);}catch(error){if(error.code!=='ENOENT')throw error;newProfile=true;}
  const userDir=join(userDataDir,'User');
+ let useBootstrap=false;
  const folder=workspace?resolve(workspace):join(config.home,'workspace');
  if(workspace){
   let directory=false;try{directory=(await stat(folder)).isDirectory();}catch{}
@@ -81,6 +84,7 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
  });
  await updateJson(join(userDir,'settings.json'),settings=>{
   settings??={};assert(isObject(settings),'invalid_desktop_config','専用VS Codeの設定を読み取れません。');
+  useBootstrap=newProfile||settings['m365Relay.initializeFirstRun']===true;
   const terminalEnv=settings['terminal.integrated.env.windows']??{};
   assert(isObject(terminalEnv),'invalid_desktop_config','専用VS Codeの端末環境設定を読み取れません。');
   const migratedEnv={...terminalEnv};
@@ -91,6 +95,7 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
   const oldGeneratedDefault=Object.keys(settings).length===1&&settings['chat.byokUtilityModelDefault']==='mainAgent';
   return {'chat.byokUtilityModelDefault':'none','chat.utilityModel':'customendpoint/m365-copilot-ui',
     ...(oldGeneratedDefault?{}:settings),
+    ...(newProfile?{'m365Relay.initializeFirstRun':true,'workbench.editor.useModal':'off'}:{}),
     'editor.fontSize':16,'chat.fontSize':16,'chat.editor.fontSize':16,'window.zoomLevel':1,
     'workbench.startupEditor':'none',
     'workbench.secondarySideBar.defaultVisibility':'maximized','workbench.sideBar.location':'left',
@@ -107,7 +112,8 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
  try{actualUserDataDir=await realpath(userDataDir);}catch{
   throw new BridgeError('profile_resolution_failed','専用VS Code設定の実際の保存先を確認できません。起動せず停止しました。',400);
  }
- return {executable,userDataDir:actualUserDataDir,workspace:actualFolder,runtimeExecutable,pythonExecutable,documentCommand,pdfCommand,port:config.port};
+ return {executable,userDataDir:actualUserDataDir,workspace:actualFolder,runtimeExecutable,pythonExecutable,documentCommand,pdfCommand,port:config.port,
+   ...(useBootstrap?{extensionsDir:join(config.home,'vscode-extensions')}:{})};
 }
 
 export async function launchDesktop(plan,{spawnProcess=spawn}={}){
@@ -120,7 +126,7 @@ export async function launchDesktop(plan,{spawnProcess=spawn}={}){
   for(const name of ['M365_RELAY_OFFICECLI','OFFICECLI_SKIP_UPDATE','OFFICECLI_NO_AUTO_RESIDENT','OFFICECLI_RESIDENT_FLUSH'])delete env[name];
   Object.assign(env,{M365_RELAY_PYTHON:plan.pythonExecutable,M365_RELAY_DOCUMENTS:plan.documentCommand});
  }
- const child=spawnProcess(plan.executable,['--user-data-dir',plan.userDataDir,'--new-window',plan.workspace],
+ const child=spawnProcess(plan.executable,['--user-data-dir',plan.userDataDir,...(plan.extensionsDir?['--extensions-dir',plan.extensionsDir,'--skip-welcome']:[]),'--new-window',plan.workspace],
   {detached:true,stdio:'ignore',shell:false,env});
  await once(child,'spawn');child.unref();
 }

@@ -43,6 +43,11 @@ export async function existingDesktopPlan(config,{workspace,fetchImpl=fetch,aliv
  const plan=instance.plan;let profile;
  try{profile=await realpath(join(config.home,'vscode-data'));assert(typeof plan.userDataDir==='string'&&await realpath(plan.userDataDir)===profile,'instance_unverifiable','専用プロファイルが一致しません。',409);}
  catch{throw new BridgeError('instance_unverifiable','専用プロファイルの保存先を確認できません。',409);}
+ if(plan.extensionsDir){
+  let expected,actual;
+  try{expected=await realpath(join(config.home,'vscode-extensions'));actual=await realpath(plan.extensionsDir);}catch{throw new BridgeError('instance_unverifiable','専用拡張の保存先を確認できません。',409);}
+  assert(actual===expected,'instance_unverifiable','専用拡張の保存先が一致しません。',409);
+ }
  const folder=workspace?resolve(workspace):plan.workspace;
  let actualFolder;
  try{assert(typeof folder==='string'&&(await stat(folder)).isDirectory(),'workspace_not_found','作業フォルダーを確認できません。',400);actualFolder=await realpath(folder);}

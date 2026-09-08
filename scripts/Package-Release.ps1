@@ -45,6 +45,7 @@ try {
     if ($LASTEXITCODE -ne 0 -or $actualVersion -cne "v$($lock.version)") { throw 'Bundled runtime version check failed.' }
     & (Join-Path $PSScriptRoot 'Prepare-PythonRuntime.ps1') -Destination (Join-Path $runtime 'python') -CacheDirectory $PythonCacheDirectory
     Copy-Item -LiteralPath (Join-Path $root 'python') -Destination (Join-Path $stage 'python') -Recurse
+    & (Join-Path $PSScriptRoot 'Build-Bootstrap.ps1') -Destination (Join-Path $stage 'vscode-bootstrap')
     # Curated distribution: never copy local settings, tokens, profiles, logs or npm.
     foreach ($relative in @('src','prompts','config','README.md','THIRD_PARTY.md','Bridge.cmd','Run.cmd','Setup.cmd','Recover.cmd','Open-Copilot.cmd','Start-Bridge.cmd','package.json')) {
         if ($relative -in @('src','prompts','config')) {

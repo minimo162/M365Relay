@@ -7,9 +7,18 @@ import {EventEmitter} from 'node:events';
 import {prepareDesktop,findVSCode,launchDesktop} from '../src/desktop.mjs';
 async function fixture(t){const home=await mkdtemp(join(tmpdir(),'relay-desktop-'));t.after(()=>rm(home,{recursive:true,force:true}));return {home,port:8731,token:'a'.repeat(64)};}
 
+test('legacy profiles are not opted into a new extensions directory',async t=>{
+ const c=await fixture(t);await mkdir(join(c.home,'vscode-data/User'),{recursive:true});
+ const path=join(c.home,'vscode-data/User/settings.json');await writeFile(path,JSON.stringify({'extensions.autoUpdate':false}));
+ const plan=await prepareDesktop(c);assert.equal(plan.extensionsDir,undefined);
+ const settings=JSON.parse(await readFile(path,'utf8'));
+ assert.equal(settings['m365Relay.initializeFirstRun'],undefined);assert.equal(settings['extensions.autoUpdate'],false);
+});
+
 test('first-run setup creates an isolated usable model without modifying a normal profile',async t=>{
  const c=await fixture(t);const normal=join(c.home,'normal-profile.json');await writeFile(normal,'USER SETTINGS');
  const plan=await prepareDesktop(c,{executable:'Code.exe'});
+ assert.equal(plan.extensionsDir,join(c.home,'vscode-extensions'));
  assert.equal(plan.userDataDir,await realpath(join(c.home,'vscode-data')));
  const groups=JSON.parse(await readFile(join(plan.userDataDir,'User','chatLanguageModels.json'),'utf8'));
  const m=groups[0].models[0];assert.equal(m.requestHeaders.Authorization,'Bearer '+c.token);
@@ -17,6 +26,8 @@ test('first-run setup creates an isolated usable model without modifying a norma
  assert.equal(m.vision,true);
  assert.equal(m.url,'http://127.0.0.1:8731/v1/chat/completions');assert.equal(groups[0].apiKey,undefined);
  const settings=JSON.parse(await readFile(join(plan.userDataDir,'User','settings.json'),'utf8'));
+ assert.equal(settings['m365Relay.initializeFirstRun'],true);
+ assert.equal(settings['workbench.editor.useModal'],'off');
  assert.equal(settings['chat.byokUtilityModelDefault'],'none');
  assert.equal(settings['chat.utilityModel'],'customendpoint/m365-copilot-ui');
  assert.equal(settings['editor.fontSize'],16);assert.equal(settings['chat.fontSize'],16);
@@ -62,7 +73,7 @@ test('workspace arguments are validated and launching never interprets them thro
  await launchDesktop(plan,{spawnProcess:(exe,args,options)=>{
   captured={exe,args,options};const child=new EventEmitter();child.unref=()=>{};queueMicrotask(()=>child.emit('spawn'));return child;
  }});
- assert.deepEqual(captured.args,['--user-data-dir',plan.userDataDir,'--new-window',await realpath(folder)]);
+ assert.deepEqual(captured.args,['--user-data-dir',plan.userDataDir,'--extensions-dir',plan.extensionsDir,'--skip-welcome','--new-window',await realpath(folder)]);
  assert.equal(captured.options.shell,false);assert.equal(captured.options.env.ELECTRON_RUN_AS_NODE,undefined);
  assert(!JSON.stringify(captured.args).includes(c.token));
 });

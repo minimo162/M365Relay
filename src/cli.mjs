@@ -14,6 +14,7 @@ import { selectThinkDeeper } from './model-selection.mjs';
 import { attachRequestImages } from './image-attachments.mjs';
 import {existingDesktopPlan,registerDesktopInstance} from './desktop-instance.mjs';
 import {reserveBridgePort} from './listen.mjs';
+import {installBootstrap} from './bootstrap.mjs';
 async function openEdge(config){
   assert(process.platform==='win32','windows_required','専用Edgeの自動起動はWindows用です。');
   // Never silently reuse an unrelated debugging port/profile.
@@ -84,6 +85,7 @@ async function main(){
       assert(process.platform==='win32','windows_required','Run.cmdはWindows用です。');
       const executable=await findVSCode();
       desktop=await prepareDesktop(config,{executable,workspace:process.argv[3]});
+      await installBootstrap(desktop);
     }
     if(desktop){
       await openEdge(config);
