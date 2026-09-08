@@ -32,6 +32,9 @@ function Expand-Pinned($path,$target,$wheel) {
             if($name.EndsWith('/')){continue}
             # Console scripts require an installer; the app uses library APIs.
             if($wheel -and $name -match '^[^/]+\.data/scripts/'){continue}
+            # Optional AVIF is not used by the PNG/JPEG document workflow.
+            # Pillow explicitly treats its missing codec as unsupported.
+            if($wheel -and $name -eq 'PIL/_avif.cp313-win_amd64.pyd'){continue}
             if($name -match '\.data/' -or $name.Contains('\') -or $name -cnotmatch '^[A-Za-z0-9@_.\-/]+$'){throw 'Unsupported Python archive entry'}
             $dest=[IO.Path]::GetFullPath((Join-Path $target $name))
             if(-not $dest.StartsWith($target+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Python archive escaped its directory'}
@@ -47,5 +50,5 @@ $site=Join-Path $Destination 'Lib/site-packages';New-Item -ItemType Directory -F
 foreach($p in $lock.packages){Expand-Pinned (Fetch-Pinned $p.file $p.url $p.sha256) $site $true}
 # Keep isolation: no site/user packages, registry paths or PYTHONPATH fallback.
 [IO.File]::WriteAllText((Join-Path $Destination 'python313._pth'),"python313.zip`n.`nLib/site-packages`n",[Text.UTF8Encoding]::new($false))
-& (Join-Path $Destination 'python.exe') -I -B -c 'import sys,openpyxl,pypdf,pypdfium2; assert sys.version_info[:3] == (3,13,15); print(sys.version)'
+& (Join-Path $Destination 'python.exe') -I -B -c 'import sys,openpyxl,pypdf,pypdfium2; from PIL import Image; assert sys.version_info[:3] == (3,13,15); print(sys.version)'
 if($LASTEXITCODE -ne 0){throw 'Python document import check failed'}

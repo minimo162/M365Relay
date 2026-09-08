@@ -8,7 +8,7 @@ export function runtimeGuidance(messages){
   commands:['pdf-read input.pdf --pages 1-3','pdf-render input.pdf output.png --page 1','xlsx-create draft.xlsx cells.json','xlsx-recalculate draft.xlsx result.xlsx','xlsx-read result.xlsx','office-pdf result.xlsx result.pdf','office-text input.docx','docx-create paragraphs.json result.docx','pptx-create slides.json result.pptx'],
   examples:{xlsx:{sheet:'Sheet1',cells:{A1:{value:'Sample'},B2:{value:1.5},B3:{value:2},B4:{formula:'SUM(B2:B3)'}}},docx:{paragraphs:['Title','Text']},pptx:{slides:[{title:'Title',paragraphs:['Text']}]}},
   notes:[
-   'Bundled libraries: openpyxl, pypdf, pypdfium2. OfficeCLI and LiteParse are no longer bundled. Do not use their old environment variables or install packages at run time.',
+   'Bundled libraries: openpyxl, pypdf, pypdfium2, Pillow. OfficeCLI and LiteParse are no longer bundled. Do not use their old environment variables or install packages at run time.',
    'Use create_file to write a Python script that reads source values directly and writes JSON with json.dump. Do not retype source strings or embed JSON/code inside PowerShell here-strings. Run scripts with the explicit bundled Python path.',
    'xlsx-create preserves strings, including leading zeros and formula-like literals. Formulas require a separate formula field. openpyxl does not calculate formulas. xlsx-read cached values can be absent or stale.',
    'xlsx-recalculate, office-pdf, docx-create and pptx-create require installed desktop Microsoft Office. They use its COM interfaces via Windows PowerShell without pywin32/lxml. If unavailable, report that limitation; never claim formulas or rendering were verified.',
