@@ -24,19 +24,25 @@ async function fingerprint(path) {
  * compare byte count and SHA-256. The destination must be new; an existing
  * file is never overwritten as part of a verification retry.
  */
-export async function copyFileExact(sourceInput, destinationInput) {
+export async function copyFileExact(sourceInput, destinationInput, {copy=copyFile,statFile=stat,readFingerprint=fingerprint}={}) {
   assert(typeof sourceInput === 'string' && sourceInput.length > 0 &&
     typeof destinationInput === 'string' && destinationInput.length > 0,
     'file_path_required', 'コピー元とコピー先のパスが必要です。', 400);
   const source = resolve(sourceInput), destination = resolve(destinationInput);
   assert(source !== destination, 'file_path_same', 'コピー元とコピー先が同じです。', 400);
   let sourceStat;
-  try { sourceStat = await stat(source); }
+  try { sourceStat = await statFile(source); }
   catch (error) { throw new BridgeError('source_not_found', 'コピー元を確認できません。', 400, { reason: error?.code ?? 'stat_failed' }); }
   assert(sourceStat.isFile(), 'source_not_file', 'コピー元が通常のファイルではありません。', 400);
 
+  // Capture the source before copying as well as after it. This does not lock
+  // a file against an external writer, but it detects the common case where
+  // the source changes while the copy is in progress instead of reporting a
+  // mixed snapshot as a successful exact copy.
+  const sourceBefore = await readFingerprint(source);
+
   try {
-    await copyFile(source, destination, constants.COPYFILE_EXCL);
+    await copy(source, destination, constants.COPYFILE_EXCL);
   } catch (error) {
     if (error?.code === 'EEXIST') {
       throw new BridgeError('destination_exists', 'コピー先が既に存在するため上書きしません。', 409);
@@ -45,8 +51,12 @@ export async function copyFileExact(sourceInput, destinationInput) {
       { reason: error?.code ?? 'copy_failed' });
   }
 
-  const sourceFingerprint = await fingerprint(source);
-  const destinationFingerprint = await fingerprint(destination);
+  const sourceFingerprint = await readFingerprint(source);
+  const destinationFingerprint = await readFingerprint(destination);
+  const sourceStable = sourceBefore.bytes === sourceFingerprint.bytes &&
+    sourceBefore.sha256 === sourceFingerprint.sha256;
+  assert(sourceStable, 'source_changed_during_copy', 'コピー中に元ファイルが変更されたため、結果を採用せず停止しました。', 409,
+    { before: sourceBefore, after: sourceFingerprint });
   const byteEqual = sourceFingerprint.bytes === destinationFingerprint.bytes &&
     sourceFingerprint.sha256 === destinationFingerprint.sha256;
   assert(byteEqual, 'copy_integrity_failed', 'コピー後のバイト数またはSHA-256が一致しません。手作業で修復せず停止しました。', 502,
@@ -56,9 +66,9 @@ export async function copyFileExact(sourceInput, destinationInput) {
     protocol: 'm365-relay.file-integrity.v1',
     action: 'copy_verified',
     source, destination,
+    source_before_bytes: sourceBefore.bytes, source_before_sha256: sourceBefore.sha256,
     source_bytes: sourceFingerprint.bytes, destination_bytes: destinationFingerprint.bytes,
     source_sha256: sourceFingerprint.sha256, destination_sha256: destinationFingerprint.sha256,
-    byte_equal: true, readback_verified: true
+    source_unchanged: true, byte_equal: true, readback_verified: true
   };
 }
-

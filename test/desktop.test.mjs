@@ -76,7 +76,19 @@ test('workspace arguments are validated and launching never interprets them thro
  }});
  assert.deepEqual(captured.args,['--user-data-dir',plan.userDataDir,'--extensions-dir',plan.extensionsDir,'--skip-welcome','--new-window',await realpath(folder)]);
  assert.equal(captured.options.shell,false);assert.equal(captured.options.env.ELECTRON_RUN_AS_NODE,undefined);
+ assert.equal(captured.options.env.M365_RELAY_WORKSPACE_STATE,plan.workspaceStateFile);
  assert(!JSON.stringify(captured.args).includes(c.token));
+});
+
+test('reuses the dedicated last workspace and refuses a removed remembered folder',async t=>{
+ const c=await fixture(t),remembered=join(c.home,'remembered'),explicit=join(c.home,'explicit');
+ await mkdir(remembered);await writeFile(join(c.home,'workspace-state.json'),JSON.stringify({version:1,path:remembered,updated_at:new Date().toISOString()}));
+ const plan=await prepareDesktop(c,{executable:'Code.exe'});
+ assert.equal(plan.workspace,await realpath(remembered));
+ await mkdir(explicit);const override=await prepareDesktop(c,{executable:'Code.exe',workspace:explicit});
+ assert.equal(override.workspace,await realpath(explicit));
+ await rm(remembered,{recursive:true});
+ await assert.rejects(prepareDesktop(c,{executable:'Code.exe'}),{code:'workspace_not_found'});
 });
 
 test('VS Code discovery reports missing prerequisite and supports explicit portable path',async()=>{

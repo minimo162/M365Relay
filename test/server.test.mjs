@@ -45,6 +45,30 @@ test('health records a sign-in requirement without claiming availability',async 
   assert.equal((await s.post()).status,503);
   const health=await (await fetch(s.url+'/health')).json();assert.equal(health.m365_state,'sign_in_required');assert.equal(health.model_state,'not_verified');
 });
+test('health clears availability after a post-send timeout',async t=>{
+ let n=0;const s=await setup(t,async(r,o)=>{
+   await o.onBeforeSend();
+   if(n++===0)return final(r);
+   throw new DOMException('timed out','TimeoutError');
+ });
+ assert.equal((await s.post({...base,messages:[{role:'user',content:'first'}]})).status,200);
+ const failed=await s.post({...base,messages:[{role:'user',content:'second'}]});
+ assert.equal(failed.status,504);
+ const health=await (await fetch(s.url+'/health')).json();
+ assert.equal(health.m365_state,'result_unconfirmed');
+ assert.equal(health.model_state,'not_verified');
+});
+test('health records the producer model error code and clears stale availability',async t=>{
+ let n=0;const s=await setup(t,async(r,o)=>{
+   if(n++===0){await o.onBeforeSend();return final(r);}
+   throw new BridgeError('copilot_model_unavailable','Model unavailable',503);
+ });
+ assert.equal((await s.post({...base,messages:[{role:'user',content:'first'}]})).status,200);
+ assert.equal((await s.post({...base,messages:[{role:'user',content:'second'}]})).status,503);
+ const health=await (await fetch(s.url+'/health')).json();
+ assert.equal(health.m365_state,'not_verified');
+ assert.equal(health.model_state,'unavailable');
+});
 test('stream native tool call and terminal event, no partial tool execution',async t=>{
   const s=await setup(t,async(r,o)=>{await o.onBeforeSend();return JSON.stringify({protocol:PROTOCOL,request_id:r.requestId,action:'tool_calls',content:'読む',tool_calls:[{name:'native_tool',arguments:{path:'test.txt'}}],complete:true});});
   const b={...base,stream:true,tools:[{type:'function',function:{name:'native_tool',parameters:{type:'object',properties:{path:{type:'string'}},required:['path'],additionalProperties:false}}}]};

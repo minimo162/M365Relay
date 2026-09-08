@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, copyFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { copyFileExact } from '../src/file-integrity.mjs';
@@ -16,6 +16,7 @@ test('copyFileExact preserves CRLF, tabs, Unicode and a final newline byte-for-b
   assert.equal(result.destination_bytes, bytes.length);
   assert.equal(result.byte_equal, true);
   assert.equal(result.readback_verified, true);
+  assert.equal(result.source_unchanged, true);
   assert.deepEqual(await readFile(destination), bytes);
   assert.deepEqual(await readFile(source), bytes);
 });
@@ -36,3 +37,15 @@ test('copyFileExact does not create a destination when the source is missing', a
   await assert.rejects(copyFileExact(join(root, 'missing.txt'), join(root, 'copy.txt')), { code: 'source_not_found' });
 });
 
+test('copyFileExact rejects a source that changes during the copy', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'relay-copy-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = join(root, 'source.txt'), destination = join(root, 'copy.txt');
+  await writeFile(source, 'before\r\n');
+  await assert.rejects(copyFileExact(source, destination, {
+    copy: async (from, to, flags) => {
+      await copyFile(from, to, flags);
+      await writeFile(from, 'changed after copy\r\n');
+    }
+  }), { code: 'source_changed_during_copy' });
+});

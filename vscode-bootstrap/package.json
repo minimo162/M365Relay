@@ -1,7 +1,7 @@
 {
   "name": "first-run-model-setup",
   "publisher": "m365relay",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "M365Relay 初回準備",
   "description": "M365Relay専用環境のモデルを初回だけ準備します。",
   "engines": {"vscode": "^1.90.0"},
