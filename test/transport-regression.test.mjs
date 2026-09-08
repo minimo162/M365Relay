@@ -164,3 +164,12 @@ test('final v2 requires an end marker without reinterpreting legacy final text',
  assert.throws(()=>parseEnvelope(`BRIDGE_FINAL_V2 ${r.requestId}\nanswer`,r),{code:'invalid_envelope'});
  assert.equal(parseEnvelope(`BRIDGE_FINAL ${r.requestId}\nanswer\nEND_BRIDGE_FINAL_V2`,r).content,'answer\nEND_BRIDGE_FINAL_V2');
 });
+
+test('final review preserves colons and nested Markdown inside a longer transport fence',()=>{
+ const r=request({tools:[]});
+ const body='問題点:\n名前付き引数は有効です。\n修正版:\n```vba\nMsgBox Prompt:="結果: " & n, Buttons:=vbInformation\nn = 1: Debug.Print n\n```\n補足: 終了です。';
+ const fence='`'.repeat(8);
+ assert.equal(parseEnvelope(`${fence}text\nBRIDGE_FINAL_V2 ${r.requestId}\n${body}\nEND_BRIDGE_FINAL_V2\n${fence}`,r).content,body);
+ assert.throws(()=>parseEnvelope(`${fence}text\nBRIDGE_FINAL_V2 ${r.requestId}\n${body}\n${fence}`,r));
+ assert.throws(()=>parseEnvelope(`${fence}text\nBRIDGE_FINAL_V2 00000000-0000-0000-0000-000000000000\n${body}\nEND_BRIDGE_FINAL_V2\n${fence}`,r));
+});
