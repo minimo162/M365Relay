@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 
 spec = importlib.util.spec_from_file_location("document_runtime", Path(__file__).resolve().parents[1] / "python/document_runtime.py")
 runtime = importlib.util.module_from_spec(spec)
@@ -85,6 +86,18 @@ class XlsxInputTests(unittest.TestCase):
                 runtime.xlsx_create(target, source)
             self.assertFalse(target.exists())
 
+
+
+class PowerPointOrderTests(unittest.TestCase):
+    def test_readback_follows_presentation_order_not_part_filenames(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)/"reordered.pptx"
+            with zipfile.ZipFile(path, "w") as z:
+                z.writestr("ppt/presentation.xml", '<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="257" r:id="rId2"/><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>')
+                z.writestr("ppt/_rels/presentation.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide2.xml"/></Relationships>')
+                for n in (1,2,3):
+                    z.writestr(f"ppt/slides/slide{n}.xml", f'<a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:t>Slide {n}</a:t></a:r></a:p>')
+            self.assertEqual([p["text"] for p in runtime.office_text(path)["parts"]], ["Slide 2", "Slide 1"])
 
 if __name__ == "__main__":
     unittest.main()

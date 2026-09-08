@@ -217,11 +217,36 @@ def office_text(path):
     with zipfile.ZipFile(path) as archive:
         if sum(i.file_size for i in archive.infolist()) > 128*1024*1024:
             raise ValueError("Expanded document too large")
-        import re
-        names = [n for n in archive.namelist() if n == "word/document.xml" or re.fullmatch(r"ppt/slides/slide\d+\.xml", n)]
+        if Path(path).suffix.lower() == ".docx":
+            names = ["word/document.xml"]
+        else:
+            import posixpath
+            from urllib.parse import unquote
+            pns = "http://schemas.openxmlformats.org/presentationml/2006/main"
+            rns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+            relns = "http://schemas.openxmlformats.org/package/2006/relationships"
+            presentation = ET.fromstring(archive.read("ppt/presentation.xml"))
+            relationships = ET.fromstring(archive.read("ppt/_rels/presentation.xml.rels"))
+            rels = {}
+            for rel in relationships.findall(f"{{{relns}}}Relationship"):
+                key = rel.get("Id")
+                if not key or key in rels:
+                    raise ValueError("Missing or duplicate presentation relationship")
+                rels[key] = rel
+            names = []
+            for slide in presentation.findall(f"{{{pns}}}sldIdLst/{{{pns}}}sldId"):
+                rel = rels.get(slide.get(f"{{{rns}}}id"))
+                if rel is None or rel.get("Type") != rns + "/slide" or rel.get("TargetMode", "Internal") != "Internal":
+                    raise ValueError("Invalid slide relationship")
+                target = unquote(rel.get("Target", ""))
+                if not target or "\\" in target or ":" in target or "?" in target or "#" in target:
+                    raise ValueError("Invalid slide part target")
+                name = posixpath.normpath(target.lstrip("/") if target.startswith("/") else "ppt/" + target)
+                if name.startswith("../") or name not in archive.namelist():
+                    raise ValueError("Missing slide part")
+                names.append(name)
         if not names:
             raise ValueError("No document/slide parts found")
-        names.sort(key=lambda n: int(Path(n).stem[5:]) if n.startswith("ppt/") else 0)
         parts = []
         for name in names:
             namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main" if name.startswith("word/") else "http://schemas.openxmlformats.org/drawingml/2006/main"
