@@ -38,3 +38,9 @@ test('queue telemetry remains numeric and does not serialize arbitrary queued da
  assert.equal(rows[3].queue_depth,undefined);assert.equal(rows[3].queue_wait_ms,undefined);
  assert(printed.includes('先行する要求の完了を待っています。'));
 });
+
+test('desktop launch diagnostics exclude executable paths and raw failure text',async t=>{
+ const logger=await createRunLog(await home(t),{print:()=>{}});
+ logger.log({event:'desktop_launch',desktop_status:'failed',exit_code:-1,executable:'PRIVATE',stderr:'SECRET'});
+ logger.log({event:'desktop_launch',desktop_status:'PRIVATE',exit_code:'SECRET'});await logger.flush();const text=await readFile(logger.path,'utf8'),rows=text.trim().split('\n').map(JSON.parse);assert(!/PRIVATE|SECRET/.test(text));assert.equal(rows[0].exit_code,-1);assert.equal(rows[0].desktop_status,'failed');assert.equal(rows[1].desktop_status,undefined);assert.equal(rows[1].exit_code,undefined);
+});

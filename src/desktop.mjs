@@ -1,7 +1,7 @@
 import {readFile,writeFile,mkdir,rename,unlink,stat,access,realpath} from 'node:fs/promises';
 import {join,resolve,dirname} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {spawn} from 'node:child_process';
+import {spawn,execFile} from 'node:child_process';
 import {once} from 'node:events';
 import {fileURLToPath} from 'node:url';
 import {strictJson,isObject} from './json.mjs';
@@ -116,7 +116,22 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
    ...(useBootstrap?{extensionsDir:join(config.home,'vscode-extensions')}:{})};
 }
 
-export async function launchDesktop(plan,{spawnProcess=spawn}={}){
+export function observeDesktopWindow(plan,pid,signal,{platform=process.platform,execute=execFile}={}){
+ if(platform!=='win32'||!Number.isInteger(pid)||pid<=0)return Promise.resolve({status:'unconfirmed'});
+ const powershell=join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
+ const script=fileURLToPath(new URL('../scripts/Observe-Desktop.ps1',import.meta.url));
+ return new Promise(resolve=>execute(powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-ProcessId',String(pid),'-ExpectedPath',plan.executable],
+  {windowsHide:true,timeout:40000,maxBuffer:4096,signal},(error,stdout)=>resolve({status:!error&&stdout==='window_ready'?'window':'unconfirmed'})));
+}
+
+export function desktopLaunchMessage(receipt){
+ if(receipt.status==='window')return 'VS Codeのウィンドウを確認しました。';
+ if(receipt.status==='handoff')return 'VS Codeへ画面を開く要求を送りました。';
+ if(receipt.status==='failed')return `VS Codeの起動プロセスが終了しました（終了コード ${Number.isSafeInteger(receipt.exitCode)?receipt.exitCode:'不明'}）。更新処理が動いている場合は、完了後に起動し直してください。`;
+ return 'VS Codeへ起動を要求しましたが、ウィンドウを確認できません。更新状態やVS Code側の表示を確認してください。';
+}
+
+export async function launchDesktop(plan,{spawnProcess=spawn,observeWindow=observeDesktopWindow,startupTimeoutMs=35000}={}){
  assert(plan.executable,'vscode_not_found','Visual Studio Codeが見つかりません。',503);
  const env={...process.env};
  for(const name of ['ELECTRON_RUN_AS_NODE','VSCODE_IPC_HOOK_CLI','NODE_OPTIONS','NODE_PATH'])delete env[name];
@@ -128,5 +143,15 @@ export async function launchDesktop(plan,{spawnProcess=spawn}={}){
  }
  const child=spawnProcess(plan.executable,['--user-data-dir',plan.userDataDir,...(plan.extensionsDir?['--extensions-dir',plan.extensionsDir,'--skip-welcome']:[]),'--new-window',plan.workspace],
   {detached:true,stdio:'ignore',shell:false,env});
- await once(child,'spawn');child.unref();
+ let onExit;
+ const exited=new Promise(resolve=>{onExit=code=>resolve({status:code===0?'handoff':'failed',exitCode:Number.isInteger(code)?code:null});child.once('exit',onExit);});
+ const controller=new AbortController();let timer;
+ try{
+  await once(child,'spawn');
+  const windowReady=new Promise(resolve=>{
+   Promise.resolve().then(()=>observeWindow(plan,child.pid,controller.signal)).then(receipt=>{if(receipt?.status==='window')resolve(receipt);}).catch(()=>{});
+  });
+  const deadline=new Promise(resolve=>{timer=setTimeout(()=>resolve({status:'unconfirmed'}),startupTimeoutMs);});
+  return await Promise.race([exited,windowReady,deadline]);
+ }finally{clearTimeout(timer);controller.abort();child.removeListener('exit',onExit);child.unref();}
 }

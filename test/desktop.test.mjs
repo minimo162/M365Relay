@@ -70,7 +70,7 @@ test('workspace arguments are validated and launching never interprets them thro
  const c=await fixture(t);await assert.rejects(prepareDesktop(c,{workspace:join(c.home,'missing')}),{code:'workspace_not_found'});
  const folder=join(c.home,'space & quote-test');await mkdir(folder);
  const plan=await prepareDesktop(c,{workspace:folder,executable:'Code.exe'});let captured;
- await launchDesktop(plan,{spawnProcess:(exe,args,options)=>{
+ await launchDesktop(plan,{observeWindow:async()=>({status:'window'}),spawnProcess:(exe,args,options)=>{
   captured={exe,args,options};const child=new EventEmitter();child.unref=()=>{};queueMicrotask(()=>child.emit('spawn'));return child;
  }});
  assert.deepEqual(captured.args,['--user-data-dir',plan.userDataDir,'--extensions-dir',plan.extensionsDir,'--skip-welcome','--new-window',await realpath(folder)]);
@@ -116,7 +116,7 @@ test('profile launch path is physical so restarts keep the same history director
  assert.equal(plan.userDataDir,await realpath(actual));
  assert.equal(await readFile(join(actual,'User','history-sentinel'),'utf8'),'keep-existing-history');
  let captured;
- await launchDesktop(plan,{spawnProcess:(exe,args)=>{
+ await launchDesktop(plan,{observeWindow:async()=>({status:'window'}),spawnProcess:(exe,args)=>{
   captured=args;const child=new EventEmitter();child.unref=()=>{};
   queueMicrotask(()=>child.emit('spawn'));return child;
  }});
