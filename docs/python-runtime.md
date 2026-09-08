@@ -87,3 +87,4 @@ pdf-read input.pdf output.jsonは完全な抽出結果を新規UTF-8 JSONへ排�
 
 これは一つの固定課題での成功であり、一般的な文書作業の成功率・大量文書・会社の初回導入の保証ではない。ローカル配布10検査とCI34215411611全ジョブも成功。検証用接続プロセスは終了した。
 `pdf-text input.pdf [--pages 6-10]` は座標を取得せず、ページ番号と本文だけを返します。既定は冒頭5ページ。totalPages、parsedPageNumbers、documentCompleteで読取範囲を区別します。本文48,000文字超は範囲を狭めるエラーとなり、黙って切り詰めません。内容説明にはこちらを使い、表・配置の確認には従来のpdf-readと画像を使います。
+`pdf-info input.pdf` は本文や座標を抽出せず、原本パス・総ページ数・しおり（title/depth/pageNum）を返します。pageNumは印刷ページ番号ではなくPDFの物理ページです。最大500項目・見出し合計24,000文字を超えるとoutlineTruncated=true。しおりが空または途中の場合はpdf-textで本文の目次を確認します。しおりの取得は本文の読了を意味しません。

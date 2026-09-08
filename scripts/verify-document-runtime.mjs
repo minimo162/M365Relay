@@ -43,6 +43,9 @@ await assert.rejects(readFile(outside),{code:'ENOENT'});
 
 
 const python=join(app,'runtime/python/python.exe'),document=join(app,'python/document_runtime.py');
+const info=JSON.parse(run(python,['-I','-B',document,'pdf-info',input]));
+assert.equal(info.totalPages,1);assert.deepEqual(info.outline,[]);assert.equal(info.outlineTruncated,false);
+assert.equal(info.sourceFile,input);
 const textResult=JSON.parse(run(python,['-I','-B',document,'pdf-text',input]));
 assert.equal(textResult.totalPages,1);
 assert.equal(textResult.documentComplete,true);
@@ -62,6 +65,15 @@ assert.deepEqual(partialText.parsedPageNumbers,[1,2,3,4,5]);
 const lastText=JSON.parse(run(python,['-I','-B',document,'pdf-text',multiInput,'--pages','6']));
 assert.deepEqual(lastText.parsedPageNumbers,[6]);
 assert.equal(lastText.pages[0].text,result.pages[0].text);
+const outlineInput=join(work,'outline.pdf');
+run(python,['-I','-B','-c','import sys; from pypdf import PdfReader,PdfWriter; w=PdfWriter(clone_from=sys.argv[1]); p=w.add_outline_item("Part: A",0); w.add_outline_item("Detail",1,parent=p); w.add_outline_item("Part: B",5); w.write(sys.argv[2])',multiInput,outlineInput]);
+const outline=JSON.parse(run(python,['-I','-B',document,'pdf-info',outlineInput]));
+assert.deepEqual(outline.outline,[{title:'Part: A',depth:0,pageNum:1},{title:'Detail',depth:1,pageNum:2},{title:'Part: B',depth:0,pageNum:6}]);
+assert.equal(outline.outlineTruncated,false);
+const largeOutline=join(work,'large-outline.pdf');
+run(python,['-I','-B','-c','import sys; from pypdf import PdfWriter; w=PdfWriter(); w.add_blank_page(width=100,height=100); [w.add_outline_item(str(i),0) for i in range(501)]; w.write(sys.argv[1])',largeOutline]);
+const limited=JSON.parse(run(python,['-I','-B',document,'pdf-info',largeOutline]));
+assert.equal(limited.outline.length,500);assert.equal(limited.outlineTruncated,true);
 const doc=(...args)=>JSON.parse(run(python,['-I','-B',document,...args]));
 assert.equal(doc('pdf-read',input).parser,'pypdfium2');
 const savedPdf=join(work,'python-pdf-read.json');

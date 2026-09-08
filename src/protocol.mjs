@@ -120,7 +120,7 @@ ${JSON.stringify('回答です。\n補足: "引用符"とコードも保持し�
 END_BRIDGE_FINAL_JSON
 ${outerFence}
 本文のJSON文字列は1物理行に書きます。response_formatがJSONを要求する場合は、そのJSON文書をさらにJSON文字列として包みます。要求ID・終端は省略しません。ツール依頼は従来のBRIDGE_TOOL形式です。`;
-  const documentReminder=runtimeGuidance(messages)?'文書作業の実行方法: PDFの内容説明には同梱Pythonのpdf-text input.pdfを使い、総ページ数と冒頭5ページを確認してから--pagesで必要範囲を読み足します。座標付きJSON全文を会話へ出力せず、確認したページ範囲を区別してください。PDF全ページをJSONへ保存する場合はpdf-read input.pdf output.jsonとし、未確認のページ数を1-999などと推測しないでください。Pythonコードはファイル作成ツールで.pyとして保存し、同梱Pythonで実行します。原本の文字列を直接読んでjson.dump等で保存し、JSONやコードをPowerShellのhere-stringへ埋め込まないでください。実行が失敗した場合はその出力を確認してから次へ進みます。画像による確認を依頼された場合は画像ツールで実際に開いてから最終回答します。上記の通信外枠は維持してください。':'';
+  const documentReminder=runtimeGuidance(messages)?'文書作業の実行方法: 拡張子省略の文書説明では同名の抽出JSONより原本PDFを優先します。pdf-info input.pdfで総ページ数と全体のしおりを確認し、必要な本文をpdf-textで読みます。目次が途中なら追加確認し、冒頭だけで未確認と述べて止まらないでください。PDFの本文には同梱Pythonのpdf-text input.pdfを使い、総ページ数と冒頭5ページを確認してから--pagesで必要範囲を読み足します。座標付きJSON全文を会話へ出力せず、確認したページ範囲を区別してください。PDF全ページをJSONへ保存する場合はpdf-read input.pdf output.jsonとし、未確認のページ数を1-999などと推測しないでください。Pythonコードはファイル作成ツールで.pyとして保存し、同梱Pythonで実行します。原本の文字列を直接読んでjson.dump等で保存し、JSONやコードをPowerShellのhere-stringへ埋め込まないでください。実行が失敗した場合はその出力を確認してから次へ進みます。画像による確認を依頼された場合は画像ツールで実際に開いてから最終回答します。上記の通信外枠は維持してください。':'';
   const prompt = `${template}\n\nBRIDGE_REQUEST_ID: ${requestId}\nBRIDGE_REQUEST_JSON:\n${serialized}\nEND_BRIDGE_REQUEST_JSON\n${transportReminder}\n${finalFrame}\n${documentReminder}\n`;
   const promptLimit=Math.min(maxPromptChars,120000);
   if(prompt.length>promptLimit)throw new BridgeError('context_too_large', '会話とツール定義が入力上限を超えました。会話を圧縮するか、選択ツールを減らしてください。本文は切り捨てず、M365への送信前に停止しました。', 413,
