@@ -12,7 +12,7 @@ export function attachmentState(origin,names){
  const attachmentCount=labels.filter(l=>/^添付ファイル .* を削除する$/.test(l)||/^Remove attachment /.test(l)).length;
  return {dialog:dialogs.length>0,attached,pending,attachmentCount};
 }
-export async function attachRequestImages({browser,sessionId,config,images,signal,onBeforeUpload}){
+export async function attachRequestImages({browser,sessionId,config,images,signal,onBeforeUpload,onProgress}){
  if(!images.length)return async()=>{};
  const base=join(config.home,'image-staging');await mkdir(base,{recursive:true});
  const directory=await mkdtemp(join(base,'request-')),written=[];
@@ -39,6 +39,7 @@ export async function attachRequestImages({browser,sessionId,config,images,signa
   const deadline=Date.now()+config.readyTimeoutMs;let stableSince;
   do{
    const state=await check();
+   await onProgress?.();
    if(state.attached.every(Boolean)&&state.attachmentCount===images.length&&!state.pending){stableSince??=Date.now();if(Date.now()-stableSince>=500)return {cleanup,verify:async()=>{const current=await check();assert(current.attached.every(Boolean)&&current.attachmentCount===images.length&&!current.pending,'image_attachment_changed','送信直前にファイルの添付状態が変わりました。送信しません。',409);}};}else stableSince=undefined;
    await delay(100,signal);
   }while(Date.now()<deadline);
