@@ -59,6 +59,30 @@ test('unknown post-send state survives ledger reload',async t=>{
   const fresh=new Ledger(s.home,token);await fresh.load();assert(Object.values(fresh.records).some(x=>x.status==='unknown_or_invalid'));
   assert.equal((await s.post()).status,409);assert.equal(s.calls(),1);
 });
+
+test('unknown image upload blocks the same image while different image bytes stay distinct',async t=>{
+  const jpeg=await readFile(new URL('./fixtures/vision-jpeg.jpg',import.meta.url));
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jq1sAAAAASUVORK5CYII=','base64');
+  const request=(mime,bytes)=>({...base,messages:[{role:'user',content:[{type:'text',text:'PRIVATE_IMAGE_CAPTION'},{type:'image_url',image_url:{url:`data:${mime};base64,${bytes.toString('base64')}`}}]}]});
+  const s=await setup(t,async(r,o)=>{
+    assert.equal(r.images.length,1);assert(!r.prompt.includes('base64,'));
+    await o.onBeforeSend();throw new BridgeError('image_upload_unknown','Upload acknowledgement lost',502);
+  },{allowImages:true});
+  assert.equal((await s.post(request('image/jpeg',jpeg))).status,502);
+  assert.equal((await s.post(request('image/jpeg',jpeg))).status,409);
+  assert.equal(s.calls(),1);
+  assert.equal((await s.post(request('image/png',png))).status,502);
+  assert.equal(s.calls(),2);
+  const fresh=new Ledger(s.home,token);await fresh.load();
+  assert.equal(Object.keys(fresh.records).length,2);
+  assert(Object.values(fresh.records).every(r=>r.status==='unknown_or_invalid'));
+  const stored=await readFile(join(s.home,'requests.json'),'utf8');
+  for(const output of [stored,JSON.stringify(s.log)]){
+    assert(!output.includes('PRIVATE_IMAGE_CAPTION'));
+    assert(!output.includes(jpeg.toString('base64').slice(0,80)));
+    assert(!output.includes(png.toString('base64')));
+  }
+});
 test('known pre-send failure permits an explicit later request',async t=>{
   let n=0;const s=await setup(t,async(r,o)=>{if(n++===0)throw new BridgeError('sign_in_required','Sign in',503);await o.onBeforeSend();return final(r);});
   assert.equal((await s.post()).status,503);assert.equal((await s.post()).status,200);assert.equal(s.calls(),2);

@@ -22,3 +22,17 @@ test('ambiguous input never uploads and clears staged files',async t=>{
  await assert.rejects(attachRequestImages({browser,config:{home,origin:'https://m365.cloud.microsoft',readyTimeoutMs:10},images,onBeforeUpload:async()=>journal=true}),{code:'image_input_missing'});
  assert.equal(journal,false);assert.deepEqual(await readdir(join(home,'image-staging')),[]);
 });
+
+test('lost upload acknowledgement is never retried and local bytes are removed',async t=>{
+ const home=await mkdtemp(join(tmpdir(),'relay-image-test-'));t.after(()=>rm(home,{recursive:true,force:true}));
+ let uploads=0,journaled=false;
+ const browser={async send(method){
+  if(method==='Runtime.evaluate')return {result:{value:{attached:[false],attachmentCount:0,pending:false}}};
+  if(method==='DOM.getDocument')return {root:{nodeId:1}};
+  if(method==='DOM.querySelectorAll')return {nodeIds:[2]};
+  if(method==='DOM.setFileInputFiles'){assert(journaled);uploads++;throw new Error('lost acknowledgement');}
+  throw Error('Unexpected command');
+ }};
+ await assert.rejects(attachRequestImages({browser,config:{home,origin:'https://m365.cloud.microsoft',readyTimeoutMs:10},images,onBeforeUpload:async()=>journaled=true}));
+ assert.equal(uploads,1);assert.deepEqual(await readdir(join(home,'image-staging')),[]);
+});
