@@ -24,8 +24,11 @@ def emit(value):
 
 
 def publish(path, writer):
-    path = Path(path).resolve()
-    if path.exists():
+    requested = Path(path).absolute()
+    # Resolve directory aliases, but never follow an existing final symlink:
+    # a dangling link must not redirect a new output to an unrelated target.
+    path = requested.parent.resolve() / requested.name
+    if path.exists() or path.is_symlink():
         raise FileExistsError("Output exists; choose a new filename")
     # Same directory/volume; exclusive final creation avoids overwriting races.
     with tempfile.TemporaryDirectory(prefix=".relay-", dir=path.parent) as temp:

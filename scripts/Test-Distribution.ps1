@@ -44,6 +44,8 @@ try {
     $env:NODE_OPTIONS=$null
     & (Join-Path $app 'runtime\node.exe') (Join-Path $PSScriptRoot 'verify-document-runtime.mjs') $app $temp
     if ($LASTEXITCODE -ne 0) { throw 'Bundled document runtime verification failed.' }; $checks++
+    & (Join-Path $app 'runtime\python\python.exe') -I -B (Join-Path $PSScriptRoot '../test/python-document-test.py')
+    if ($LASTEXITCODE -ne 0) { throw 'Python document storage contracts failed.' }
     $python = Join-Path $app 'runtime\python\python.exe'
     Move-Item -LiteralPath $python -Destination "$python.saved"
     & $bridge help

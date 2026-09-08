@@ -22,11 +22,14 @@ jobs:
           node-version: '22.23.2'
       - run: node scripts/check.mjs
       - run: node --test
+      - name: Python document storage contracts
+        if: runner.os == 'Linux'
+        run: python3 -I -B test/python-document-test.py
       - name: Parse Windows PowerShell scripts
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          Get-ChildItem scripts/*.ps1,launcher/*.ps1 | ForEach-Object {
+          Get-ChildItem scripts/*.ps1,launcher/*.ps1,python/*.ps1 | ForEach-Object {
             $tokens = $null; $parseErrors = $null
             $null = [Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors)
             if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
