@@ -18,6 +18,8 @@ $h1=(Get-FileHash '<special.txt>' -Algorithm SHA256).Hash; $h2=(Get-FileHash '<c
 
 旧要求のRelayログは、送信済み・応答候補7回・`m365_response_invalid`を記録するが、保存された応答本文全体はなく、生成・DOM抽出・表示のどの段階で崩れたかは確定できない。今回の実VS Code D再試行はHTTP/Relay成功、画面表示成功であり、旧失敗段階を遡って証明するものではない。
 
+chat sessionの保存構造を再確認すると、失敗側のresponse配列には途中までの3 tool invocationと進捗要素はあるが、最終回答本文・候補DOM本文はない。その後の保存結果は`duplicate_request`で、元の結果を再取得できる証拠にはならない。したがって、現在の証跡から生成側とDOM抽出側のどちらかを選ぶことはできない。
+
 ## 今回の成功証拠
 
 - `.local/live-vscode-d-result.json`
