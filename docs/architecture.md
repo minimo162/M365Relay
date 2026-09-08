@@ -44,7 +44,7 @@ M365 の返答に tool call ID を作らせず、検証後にアダプターが�
 
 | 項目 | 対応 |
 |---|---|
-| `GET /health` | 本文送信なしの起動確認。実機成功を示すものではない |
+| `GET /health` | 本文送信なしのRelay稼働確認。`server_state`、直近観測の`m365_state`/`model_state`、`live_verified=false`を返し、利用可能とは断定しない |
 | `GET /v1/models` | ローカル接続キーが必要。モデルIDは1個 |
 | `POST /v1/chat/completions` | テキストとfunction tools |
 | streaming | SSE。待機中はコメント、検証後に完全なdeltaを送る |

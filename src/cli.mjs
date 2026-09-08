@@ -15,6 +15,7 @@ import { attachRequestImages } from './image-attachments.mjs';
 import {existingDesktopPlan,registerDesktopInstance} from './desktop-instance.mjs';
 import {reserveBridgePort} from './listen.mjs';
 import {installBootstrap} from './bootstrap.mjs';
+import {copyFileExact} from './file-integrity.mjs';
 async function openEdge(config){
   assert(process.platform==='win32','windows_required','専用Edgeの自動起動はWindows用です。');
   // Never silently reuse an unrelated debugging port/profile.
@@ -41,7 +42,12 @@ async function main(){
   const major=Number(process.versions.node.split('.')[0]),minor=Number(process.versions.node.split('.')[1]);
   assert(major>22 || major===22&&minor>=16,'node_version','Node.js 22.16以上が必要です。');
   const command=process.argv[2]??'help';
-  if(command==='help'){console.log('Commands: run [workspace] | setup | init | open | diagnose | serve | recover-lock\nConfig/data: '+homePath());return;}
+  if(command==='help'){console.log('Commands: run [workspace] | setup | init | open | diagnose | serve | recover-lock | copy-verify <source> <destination>\nConfig/data: '+homePath());return;}
+  if(command==='copy-verify'){
+    assert(process.argv.length===5,'copy_usage','使用方法: copy-verify <コピー元> <新しいコピー先>');
+    console.log(JSON.stringify(await copyFileExact(process.argv[3],process.argv[4]),null,2));
+    return;
+  }
   if(command==='recover-lock'){await recoverProcessLock(homePath());console.log('停止済みプロセスの起動ロックを削除しました。要求台帳は保持しています。');return;}
   const config={...await loadConfig(),allowImages:true,attachToolDefinitions:true,attachConversation:true};
   let desktop;
@@ -78,7 +84,7 @@ async function main(){
     runLog=await createRunLog(config.home,{jsonConsole:process.env.M365_RELAY_JSON_LOGS==='1'});
     const log=record=>runLog.log(record);
     let proveInstance;
-    server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log,selectModel:selectThinkDeeper,attachImages:attachRequestImages}),ledger,log,instanceProof:nonce=>proveInstance?.(nonce)});
+    server=createBridgeServer({config,template,backend:new M365Backend(config,{onMetrics:log,selectModel:selectThinkDeeper,attachImages:attachRequestImages,onState:log}),ledger,log,instanceProof:nonce=>proveInstance?.(nonce)});
     const shutdown=async()=>{await server.stop();await runLog.flush();await unlock();process.exit(0);};
     process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
     const preferredPort=config.port;

@@ -8,6 +8,7 @@ import {strictJson,isObject} from './json.mjs';
 import {BridgeError,assert} from './errors.mjs';
 
 const groupName='M365Relay';
+const appRoot=fileURLToPath(new URL('../',import.meta.url));
 async function optionalText(path){try{return await readFile(path,'utf8');}catch(e){if(e.code==='ENOENT')return null;throw e;}}
 async function updateJson(path,transform){
  const before=await optionalText(path);
@@ -102,7 +103,8 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
     'chat.viewSessions.enabled':true,'chat.viewSessions.orientation':'sideBySide',
     'security.workspace.trust.enabled':false,
     'chat.permissions.default':'autopilot',
-    'terminal.integrated.env.windows':{...migratedEnv,M365_RELAY_NODE:runtimeExecutable,M365_RELAY_PDF:pdfCommand,
+    'm365Relay.statusUrl':`http://127.0.0.1:${config.port}/health`,
+    'terminal.integrated.env.windows':{...migratedEnv,M365_RELAY_APP:appRoot,M365_RELAY_NODE:runtimeExecutable,M365_RELAY_PDF:pdfCommand,
       ...(pythonExecutable?{M365_RELAY_PYTHON:pythonExecutable,M365_RELAY_DOCUMENTS:documentCommand}:{})}};
  });
  // Pin the actual profile directory as well as the workspace. Packaged Windows

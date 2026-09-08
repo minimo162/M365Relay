@@ -17,6 +17,7 @@ async function bodyText(req,maxBytes) {
 }
 export function createBridgeServer({config,template,backend,ledger,log=()=>{},instanceProof=()=>undefined,now=()=>performance.now()}) {
   const queue=new SerialQueue(config.maxQueue);const controllers=new Set();
+  const status={server_state:'running',m365_state:'not_verified',model_state:'not_verified'};
   const server=http.createServer(async(req,res)=>{
     let parsed, timer, release, fingerprint, queueStarted, queueWaitMs, possiblySent=false, settled=false;
     const client=new AbortController();controllers.add(client);
@@ -27,7 +28,7 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{},in
       const port=server.address()?.port;
       assert([`127.0.0.1:${port}`,`localhost:${port}`].includes(req.headers.host),'bad_host','ループバック以外のHostは受理しません。',403);
       assert(!req.headers.origin,'cross_origin','ブラウザーからのクロスオリジン要求は受理しません。',403);
-      if(req.method==='GET' && req.url==='/health')return json(res,200,{status:'ready',backend:'m365-cdp',live_verified:false,model:MODEL});
+      if(req.method==='GET' && req.url==='/health')return json(res,200,{status:'running',backend:'m365-cdp',live_verified:false,model:MODEL,...status});
       if(req.method==='GET'&&/^\/desktop-instance\?nonce=[0-9a-f]{64}$/.test(req.url)){
         const proof=instanceProof(req.url.slice(req.url.indexOf('=')+1));
         assert(proof,'instance_not_ready','画面の起動準備中です。',409);
@@ -55,6 +56,7 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{},in
       }});
       abortReason(signal);
       const envelope=parseEnvelope(raw,parsed);const result=completion(envelope,parsed);
+      status.m365_state='available';status.model_state='verified';
       // Persist BEFORE returning. A lost response is not silently replayed by this bridge.
       await ledger.set(fingerprint,'response_validated');settled=true;abortReason(signal);
       if(parsed.stream) {for(const c of streamChunks(result))res.write(`data: ${JSON.stringify(c)}\n\n`);res.end('data: [DONE]\n\n');}
@@ -62,6 +64,9 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{},in
       log({request_id:parsed.requestId,event:'response_returned',kind:envelope.action});
     } catch(error) {
       const safe=publicError(error);
+      if(safe.code==='sign_in_required')status.m365_state='sign_in_required';
+      else if(['model_unavailable','model_not_selected'].includes(safe.code))status.model_state='unavailable';
+      else if(['m365_response_invalid','response_mismatch','invalid_envelope'].includes(safe.code))status.m365_state='result_unconfirmed';
       if(fingerprint&&!settled) {
         try{await ledger.set(fingerprint,possiblySent?'unknown_or_invalid':'not_sent');}catch{}
       }

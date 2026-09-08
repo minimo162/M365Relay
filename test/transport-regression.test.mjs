@@ -104,6 +104,19 @@ test('json-string supports empty strings and rejects malformed or non-string val
  for(const s of ['null','{}','"bad\\q"','"unterminated','"first" "second"','"literal\nnewline"'])assert.throws(()=>parseEnvelope(wrap(s),r));
 });
 
+test('legacy JSON with an invalid Windows path is rejected without rewriting other strings',()=>{
+ const r=request();
+ const raw=JSON.stringify({protocol:PROTOCOL,request_id:r.requestId,action:'tool_calls',content:'C:\\keep\\text',tool_calls:[{name:'run_in_terminal',arguments:{command:'C:\\q',mode:'sync'}}],complete:true})
+   .replace('C:\\\\q','C:\\q');
+ assert.throws(()=>parseEnvelope(raw,r),{code:'invalid_json'});
+});
+
+test('legacy /content string keeps its documented boundary trimming contract',()=>{
+ const r=request();
+ const raw=rawTool(r).replace('CONTENT\nTest explanation','CONTENT\n\t  Test explanation\r\n\t ');
+ assert.equal(parseEnvelope(raw,r).content,'Test explanation');
+});
+
 test('code arrows and literal HTML entities remain distinct through JSON transport',()=>{
  const r=request();
  for(const source of ['rows.filter(row => row.active)', 'const literal = "&gt; &lt; &amp;";']){

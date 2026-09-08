@@ -49,9 +49,9 @@ function fixture({origin=config.origin,oldReply='',dropInput=false,wrongReply=fa
   };
   return {events,state,editor,reply,nodes,context,browser};
 }
-async function execute(f,{signal=AbortSignal.timeout(1500),onMetrics,selectModel}={}){
+async function execute(f,{signal=AbortSignal.timeout(1500),onMetrics,onState,selectModel}={}){
   const request=prepareRequest({model:MODEL,messages:[{role:'user',content:'test'}]},'test template');f.state.requestId=request.requestId;
-  const backend=new M365Backend(config,{connect:async()=>f.browser,selectModel,editorStableMs:3,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3,onMetrics});
+  const backend=new M365Backend(config,{connect:async()=>f.browser,selectModel,editorStableMs:3,inputSettleMs:100,inputPollMs:2,inputStableMs:3,sendReadyMs:100,sendReadyStableMs:3,onMetrics,onState});
   return backend.complete(request,{signal,onBeforeSend:async()=>f.events.push('journaled-before-send')});
 }
 
@@ -152,10 +152,13 @@ test('mock DOM: exact input, one send, validated answer, closes only its owned t
 });
 
 test('timings describe success and pre-send failure without prompt or response contents',async()=>{
- const success=[],f=fixture();await execute(f,{onMetrics:m=>success.push(m)});
+ const success=[],states=[],f=fixture();await execute(f,{onMetrics:m=>success.push(m),onState:s=>states.push(s)});
  assert.equal(success.length,1);const m=success[0];assert.equal(m.outcome,'success');assert.equal(m.possibly_sent,true);
  assert(m.total_ms>=0);assert(m.response_snapshots>=2);assert(m.first_reply_observed_ms!==null);
  assert(Object.values(m.phase_ms).every(v=>Number.isSafeInteger(v)&&v>=0));
+ assert(states.some(s=>s.backend_phase==='image_attach')===false);
+ assert(states.some(s=>s.backend_phase==='response_wait'));
+ assert(states.some(s=>s.backend_phase==='response_validate'));
  assert(!JSON.stringify(m).includes('test template'));assert(!JSON.stringify(m).includes('fixture final'));
  const failure=[];await assert.rejects(execute(fixture({dropInput:true}),{onMetrics:m=>failure.push(m)}),{code:'input_mismatch'});
  assert.equal(failure.length,1);assert.equal(failure[0].outcome,'error');assert.equal(failure[0].possibly_sent,false);assert.equal(failure[0].response_snapshots,0);

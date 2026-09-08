@@ -8,13 +8,20 @@
   "main": "./extension.cjs",
   "activationEvents": ["onStartupFinished"],
   "contributes": {
-    "commands": [{"command": "m365Relay.prepareModels", "title": "接続モデルを準備", "category": "M365Relay"}],
+    "commands": [
+      {"command": "m365Relay.prepareModels", "title": "接続モデルを準備", "category": "M365Relay"},
+      {"command": "m365Relay.showStatus", "title": "接続状態を表示", "category": "M365Relay"}
+    ],
     "configuration": {
       "title": "M365Relay",
       "properties": {
         "m365Relay.initializeFirstRun": {
           "type": "boolean", "default": false, "scope": "application",
           "description": "M365Relay専用環境の初回モデル準備を有効にします。"
+        },
+        "m365Relay.statusUrl": {
+          "type": "string", "default": "http://127.0.0.1:8731/health", "scope": "application",
+          "description": "M365Relayが起動時に書き込む状態確認URLです。"
         }
       }
     }

@@ -128,32 +128,6 @@ ${outerFence}
   return { body, payload, prompt, images, definitionAttachments, requestId, validators, finalValidator, model, stream:body.stream === true };
 }
 
-function normalizeInvalidWindowsPathStrings(text) {
-  let out='',i=0,changed=false;
-  while(i<text.length){
-    if(text[i]!=="\""){out+=text[i++];continue;}
-    const start=i;let j=i+1,raw='',closed=false;
-    while(j<text.length){
-      const c=text[j];
-      if(c==="\""){closed=true;j++;break;}
-      if(c==='\\' && j+1<text.length){raw+=c+text[j+1];j+=2;continue;}
-      raw+=c;j++;
-    }
-    if(!closed){out+=text.slice(start);break;}
-    const drive=/^[A-Za-z]:\\/.test(raw);
-    const hasUnsafe=drive && /\\(?!u005c)/i.test(raw);
-    if(!hasUnsafe){out+=text.slice(start,j);i=j;continue;}
-    let fixed='';
-    for(let k=0;k<raw.length;k++){
-      if(raw[k]!=='\\'){fixed+=raw[k];continue;}
-      if(/^\\u005c/i.test(raw.slice(k,k+6))){fixed+='/';k+=5;continue;}
-      fixed+='/';
-    }
-    out+='\"'+fixed+'\"';changed=true;i=j;
-  }
-  return changed?out:text;
-}
-
 function controlLine(s) {
   return s.replace(/\\_/g,'_');
 }
@@ -316,13 +290,12 @@ export function parseEnvelope(raw, req) {
   const fence = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(text);
   if (fence) text = fence[1].trim();
   let out;
-  try{out=strictJson(text,{maxBytes:1024*1024});}
-  catch(error){
-    if(error?.code!=='invalid_json')throw error;
-    const normalized=normalizeInvalidWindowsPathStrings(text);
-    if(normalized===text)throw error;
-    out=strictJson(normalized,{maxBytes:1024*1024});
-  }
+  // Legacy JSON is accepted only when it is valid JSON.  Repairing one
+  // malformed Windows path by scanning every quoted value can silently change
+  // unrelated strings, so an invalid envelope is rejected instead of being
+  // rewritten.  Callers that need exact whitespace/backslashes must use the
+  // explicit BRIDGE_TOOL json-string form.
+  out=strictJson(text,{maxBytes:1024*1024});
   assert(exactKeys(out,['protocol','request_id','action','content','tool_calls','complete']), 'invalid_envelope', '回答のフィールドが出力契約と一致しません。', 502);
   assert(out.protocol === PROTOCOL && out.request_id === req.requestId && out.complete === true, 'response_mismatch', '回答ID・プロトコル・終端を照合できません。', 502);
   assert(['tool_calls','final'].includes(out.action) && typeof out.content === 'string' && Array.isArray(out.tool_calls), 'invalid_envelope', '回答の型が出力契約と一致しません。', 502);

@@ -44,3 +44,13 @@ test('desktop launch diagnostics exclude executable paths and raw failure text',
  logger.log({event:'desktop_launch',desktop_status:'failed',exit_code:-1,executable:'PRIVATE',stderr:'SECRET'});
  logger.log({event:'desktop_launch',desktop_status:'PRIVATE',exit_code:'SECRET'});await logger.flush();const text=await readFile(logger.path,'utf8'),rows=text.trim().split('\n').map(JSON.parse);assert(!/PRIVATE|SECRET/.test(text));assert.equal(rows[0].exit_code,-1);assert.equal(rows[0].desktop_status,'failed');assert.equal(rows[1].desktop_status,undefined);assert.equal(rows[1].exit_code,undefined);
 });
+
+test('backend phases are shown as observed states and stay bounded in the log',async t=>{
+ const printed=[],logger=await createRunLog(await home(t),{print:s=>printed.push(s)});
+ logger.log({event:'backend_state',request_id:'11111111-1111-4111-8111-111111111111',backend_phase:'response_wait',private:'secret'});
+ logger.log({event:'backend_state',backend_phase:'PRIVATE',private:'secret'});
+ logger.log({event:'error',code:'m365_response_invalid'});await logger.flush();
+ const text=await readFile(logger.path,'utf8');assert(!text.includes('secret'));assert(text.includes('"backend_phase":"response_wait"'));
+ assert(printed.includes('M365の回答を待っています。'));
+ assert(printed.includes('結果を確認できないため停止しました。自動再送はしません。'));
+});

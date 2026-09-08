@@ -33,6 +33,7 @@ test('first-run setup creates an isolated usable model without modifying a norma
  assert.equal(settings['editor.fontSize'],16);assert.equal(settings['chat.fontSize'],16);
  assert.equal(settings['chat.editor.fontSize'],16);assert.equal(settings['window.zoomLevel'],1);
  assert.equal(settings['chat.permissions.default'],'autopilot');
+ assert.equal(settings['m365Relay.statusUrl'],'http://127.0.0.1:8731/health');
  assert.equal(settings['workbench.startupEditor'],'none');
  assert.equal(settings['workbench.secondarySideBar.defaultVisibility'],'maximized');
  assert.equal(settings['chat.viewSessions.enabled'],true);
@@ -131,6 +132,7 @@ test('bundled Python is exposed without changing global PATH or other terminal p
  const plan=await prepareDesktop(c,{runtimeExecutable:join(runtime,'node.exe'),executable:'Code.exe'});
  const settings=JSON.parse(await readFile(join(plan.userDataDir,'User','settings.json'),'utf8'));
  const env=settings['terminal.integrated.env.windows'];
+ assert.match(env.M365_RELAY_APP,/M365Relay[\\/]*$/i);
  assert.equal(env.M365_RELAY_PYTHON,await realpath(join(runtime,'python','python.exe')));
  assert.equal(env.M365_RELAY_OFFICECLI,undefined);assert.match(env.M365_RELAY_DOCUMENTS,/document_runtime.py$/);
  assert(!Object.keys(env).some(k=>k.toLowerCase()==='path'));
