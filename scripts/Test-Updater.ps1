@@ -37,6 +37,20 @@ Run-Update; $count++
 $currentPath=Join-Path $userRoot 'app\current.json'
 $first=Get-Content $currentPath -Raw | ConvertFrom-Json
 $firstBytes=[IO.File]::ReadAllText($currentPath)
+# The lightweight launcher must also expose a verified recovery route.
+if (-not (Test-Path -LiteralPath (Join-Path $share 'Recover.cmd'))) { throw 'Recovery launcher is missing.' }
+$installedFirst=Join-Path $userRoot ('app\versions\'+$first.revision+'-'+$first.sha256.Substring(0,12))
+$bridgeLock=Join-Path $userRoot 'bridge.lock'
+New-Item -ItemType Directory -Path $bridgeLock | Out-Null
+$ownerFile=Join-Path $bridgeLock 'owner.json'
+[IO.File]::WriteAllText($ownerFile, (@{pid=$PID;started=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $share '_launcher\Update.ps1') -Source $source -LocalRoot $userRoot -Action recover-lock
+if ($LASTEXITCODE -ne 1 -or -not (Test-Path -LiteralPath $ownerFile)) { throw 'Recovery changed a live process lock.' }; $count++
+$exitedPid=& (Join-Path $installedFirst 'runtime\node.exe') -e 'console.log(process.pid)'
+[IO.File]::WriteAllText($ownerFile, (@{pid=[int]$exitedPid;started=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File (Join-Path $share '_launcher\Update.ps1') -Source $source -LocalRoot $userRoot -Action recover-lock
+if ($LASTEXITCODE -ne 0 -or (Test-Path -LiteralPath $bridgeLock)) { throw 'Recovery did not clear the exited process lock.' }; $count++
+
 Run-Update
 if ([IO.File]::ReadAllText($currentPath) -cne $firstBytes) { throw 'Unchanged update rewrote pointer.' }; $count++
 & (Join-Path $PSScriptRoot 'New-UpdateChannel.ps1') -ZipPath $SecondZip -OutputDirectory $share
