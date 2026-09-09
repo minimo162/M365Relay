@@ -4,7 +4,7 @@
 
 独立レビュー後の修正では、初回準備用拡張を`0.1.1`へ更新して正規の`0.1.0`既存プロファイルから更新できるようにし、送信後タイムアウト・モデル選択失敗で古い`利用可能`を残さない状態遷移を追加しました。専用拡張は最後に観測したworkspaceを専用状態ファイルへ保存し、`copy-verify`はコピー前後の原本fingerprintも確認します。
 
-この修正後のローカル確認は自動テスト210件、`npm run check`（JavaScript 59、JSON 4）です。Windows配布、同じビルドでの実VS Code・実M365、GitHub CI、公開Releaseは再確認が必要で、未確認の成功とは扱いません。
+この修正後のローカル確認は自動テスト210件、`npm run check`（JavaScript 59、JSON 4）です。GitHub CI `34292950411`のWindows配布検証は成功し、artifactのmanifest・VSIX版・同梱ソースを独立照合しました。artifactはPR仮マージ`5b7c4db`由来ですが、treeは修正HEAD `89cdadd`と一致します。同じartifactでの実VS Code・実M365再試験、公開Releaseは未実施です。
 
 ---
 
