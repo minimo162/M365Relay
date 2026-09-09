@@ -17,7 +17,7 @@
 | Windows配布 | CI `34292950411`の`Test-Distribution.ps1`、同梱Node/Python/PDF/Excel/Pillow | PASS。artifact ZIP `M365Relay-0.2.32-win-x64-5b7c4db81df9.zip`を独立展開し、VSIX `0.1.1`・workspace状態コードを確認 |
 | 実M365/CDP | 変更前候補で合成・ファイル操作なし要求、HTTP 200・識別文字列保持 | 現修正と同一ビルドでは未確認 |
 | 実VS Code＋実M365 | 変更前候補で合成D課題、217 bytes・SHA-256・CRLF・読み戻し・画面表示 | 現修正と同一ビルドでは未確認 |
-| CI | PR CI `34292950411`（browser、Ubuntu/Windows、distribution） | PASS。CI仮マージ`5b7c4db`のtreeはHEAD `89cdadd`と一致 |
+| CI | PR CI `34293441672`（browser、Ubuntu/Windows、distribution） | PASS。CI仮マージ`f76da75`のtreeはHEAD `64b8156`と一致 |
 | 公開・配布 | 公開v0.2.31、0.2.32候補ZIPはローカルのみ | 未公開 |
 
 「PASS」はその行の範囲だけを示します。実M365の限定確認や自動テストを、会社端末・任意文書・通常256,000条件の一般保証へ拡張しません。
