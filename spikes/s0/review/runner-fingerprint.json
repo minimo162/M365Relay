@@ -1,0 +1,8 @@
+{
+  "reviewed_file": "spikes/s0/live.mjs",
+  "current_sha256": "8aa48f7b7aff8347fc252428cdaa0058cbc1fadd2344ec01fee016ed34068386",
+  "current_last_write_time": "2026-09-09T09:55:27.729Z",
+  "trial_observed_at": "2026-09-09T09:45:00.733Z",
+  "trial_runner_sha256_recorded": false,
+  "conclusion": "The saved trial cannot be tied to the exact current uncommitted runner by a recorded runtime fingerprint."
+}

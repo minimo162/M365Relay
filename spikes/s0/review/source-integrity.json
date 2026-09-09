@@ -1,0 +1,14 @@
+{
+  "reviewed_local_sources": {
+    "handoff_bytes": 7043,
+    "handoff_sha256": "c3b3a2b702a212c9408b1654aa18b83293f78bb1adaba29e9c16c0aa886151c3",
+    "spike_zip_sha256": "e7dd8058c456af9b833e6eeede346fc4acf8246d959376b4c24f27fe275212aa",
+    "trial_18_observations_sha256": "7271fb029d516a0543a413cd6c93fd56bb45bfdf8569c4f5facd4010d5b06f09"
+  },
+  "cross_source_checks": {
+    "handoff_external_vs_zip_member_byte_equal": true,
+    "zip_sha256sums_entries": 25,
+    "zip_sha256sums_all_match": true
+  },
+  "scope_note": "This manifest contains hashes and bounded metadata only; raw authentication-bound URLs, credentials, cookies, operator-only source bytes, and synthetic fixture token values are not published."
+}

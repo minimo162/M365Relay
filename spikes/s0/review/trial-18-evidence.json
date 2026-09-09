@@ -1,0 +1,96 @@
+{
+  "schema_version": "remote-review.s0-evidence.v1",
+  "source_trial": "trial-18",
+  "base_commit": "75972101f83cf9f5d7606e6343e64f1263a567e2",
+  "live_m365_executed": true,
+  "environment": {
+    "os": "win32",
+    "edge_version": "Edg/152.0.4191.66",
+    "copilot_surface_origin": "https://m365.cloud.microsoft",
+    "observed_mode": "regular M365 Copilot chat",
+    "observed_at": "2026-09-09T09:45:00.733Z"
+  },
+  "top_level_counts": {
+    "sends": 8,
+    "human_interventions": 1
+  },
+  "cases": {
+    "P1-v1": {
+      "status": "PASS",
+      "source_mode": "automated_fixture_upload",
+      "destination_mode": "automated_resupply",
+      "source_sha256": "6ca03c55555353422f35ea9383ab7790783c0765248343267b887dd31e17c078",
+      "source_bytes": 447,
+      "response_checks": ["PASS"],
+      "empty_new_chat_observed": true,
+      "distinct_a_b_conversations_recorded": true,
+      "sends": 2,
+      "elapsed_ms": 18309
+    },
+    "P1-v2": {
+      "status": "PASS",
+      "source_mode": "automated_fixture_upload",
+      "destination_mode": "automated_resupply",
+      "source_sha256": "eb8528da707e962e2b13747783345ecad6be90e6ab3d3ff7b4e5bbddda509da7",
+      "source_bytes": 447,
+      "response_checks": ["PASS"],
+      "revision_label": "v2",
+      "empty_new_chat_observed": true,
+      "sends": 1,
+      "elapsed_ms": 9428
+    },
+    "P2-direct": {
+      "status": "FAIL",
+      "source_mode": "operator_direct_attachment",
+      "destination_mode": "not_observed",
+      "source_sha256": "fa7f6b6095b3fd3d2ffb8fc5e2b716379997a9bc8d15b668774239184ee5bcc7",
+      "source_bytes": 450,
+      "response_checks": [],
+      "empty_new_chat_observed": true,
+      "failure_stage": "recovery",
+      "source_link_observed": true,
+      "source_host": "onedrive.live.com",
+      "downloadable_candidates_observed": 2,
+      "captured_artifact": null,
+      "operator_only_source_reused": false,
+      "sends": 1,
+      "human_interventions": 1,
+      "elapsed_ms": 10225
+    },
+    "P3-body": {
+      "status": "PASS",
+      "source_mode": "automated_fixture_upload",
+      "destination_mode": "automated_resupply",
+      "source_sha256": "c8a635660c7a0e4f27eb8070b262ab41e108e34c1b5915b4ecdd5b150f965691",
+      "source_bytes": 439,
+      "captured_artifact_mode": "assistant_body_saved_by_observer",
+      "captured_artifact_sha256": "4843fac9bde71001237d286efd433d33c0efe570e991ec5a7edcf8aedce8dd4e",
+      "captured_artifact_bytes": 183,
+      "response_checks": ["PASS", "PASS"],
+      "empty_new_chat_observed": true,
+      "distinct_a_b_conversations_recorded": true,
+      "sends": 2,
+      "elapsed_ms": 17494
+    },
+    "P4-file": {
+      "status": "PASS",
+      "source_mode": "automated_fixture_upload",
+      "destination_mode": "automated_resupply",
+      "source_sha256": "4401975093b24f9aa5ffbcd8c76f317f5243681d577038fd73e29a1fde1193ea",
+      "source_bytes": 451,
+      "captured_artifact_mode": "copilot_native_download",
+      "captured_artifact_sha256": "576037f13f544ca724f6399aeed285b4f79ec8f36d490e61d3fd9ec63c1bcd62",
+      "captured_artifact_bytes": 196,
+      "response_checks": ["PASS", "PASS"],
+      "empty_new_chat_observed": true,
+      "distinct_a_b_conversations_recorded": true,
+      "sends": 2,
+      "elapsed_ms": 29424
+    }
+  },
+  "provenance_limits": [
+    "The offline checker reports content only and keeps live_m365_route NOT_ASSESSED.",
+    "Raw authentication-bound conversation URLs and synthetic fixture tokens are intentionally omitted.",
+    "The trial record contains no runtime SHA-256 for the uncommitted live runner."
+  ]
+}
