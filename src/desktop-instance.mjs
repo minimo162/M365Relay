@@ -3,6 +3,7 @@ import {join,resolve} from 'node:path';
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {strictJson,isObject} from './json.mjs';
 import {assert,BridgeError} from './errors.mjs';
+import {readRememberedWorkspace,workspaceStatePath} from './workspace-state.mjs';
 
 const proofFor=(token,nonce,digest)=>createHmac('sha256',token).update(`m365-relay.desktop.v1\n${nonce}\n${digest}`).digest('hex');
 const digestOf=text=>createHash('sha256').update(text).digest('hex');
@@ -48,9 +49,10 @@ export async function existingDesktopPlan(config,{workspace,fetchImpl=fetch,aliv
   try{expected=await realpath(join(config.home,'vscode-extensions'));actual=await realpath(plan.extensionsDir);}catch{throw new BridgeError('instance_unverifiable','専用拡張の保存先を確認できません。',409);}
   assert(actual===expected,'instance_unverifiable','専用拡張の保存先が一致しません。',409);
  }
- const folder=workspace?resolve(workspace):plan.workspace;
+ const rememberedWorkspace=workspace?undefined:await readRememberedWorkspace(workspaceStatePath(config.home));
+ const folder=workspace?resolve(workspace):(rememberedWorkspace??plan.workspace);
  let actualFolder;
  try{assert(typeof folder==='string'&&(await stat(folder)).isDirectory(),'workspace_not_found','作業フォルダーを確認できません。',400);actualFolder=await realpath(folder);}
  catch{throw new BridgeError('workspace_not_found','作業フォルダーを確認できません。既存のフォルダーを指定してください。',400);}
- return {...plan,userDataDir:profile,workspace:actualFolder};
+ return {...plan,userDataDir:profile,workspace:actualFolder,workspaceStateFile:plan.workspaceStateFile??workspaceStatePath(config.home)};
 }

@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { strictJson } from './json.mjs';
 import { prepareRequest, parseEnvelope, completion, streamChunks, MODEL } from './protocol.mjs';
 import { SerialQueue } from './state.mjs';
-import { assert, BridgeError, publicError, abortReason } from './errors.mjs';
+import { assert, BridgeError, publicError, abortReason, MODEL_UNAVAILABLE_CODES, RESULT_UNCONFIRMED_CODES } from './errors.mjs';
 function json(res,status,value) {
   if(res.destroyed || res.writableEnded)return;
   res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}); res.end(JSON.stringify(value));
@@ -17,6 +17,7 @@ async function bodyText(req,maxBytes) {
 }
 export function createBridgeServer({config,template,backend,ledger,log=()=>{},instanceProof=()=>undefined,now=()=>performance.now()}) {
   const queue=new SerialQueue(config.maxQueue);const controllers=new Set();
+  const status={server_state:'running',m365_state:'not_verified',model_state:'not_verified'};
   const server=http.createServer(async(req,res)=>{
     let parsed, timer, release, fingerprint, queueStarted, queueWaitMs, possiblySent=false, settled=false;
     const client=new AbortController();controllers.add(client);
@@ -27,7 +28,7 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{},in
       const port=server.address()?.port;
       assert([`127.0.0.1:${port}`,`localhost:${port}`].includes(req.headers.host),'bad_host','ループバック以外のHostは受理しません。',403);
       assert(!req.headers.origin,'cross_origin','ブラウザーからのクロスオリジン要求は受理しません。',403);
-      if(req.method==='GET' && req.url==='/health')return json(res,200,{status:'ready',backend:'m365-cdp',live_verified:false,model:MODEL});
+      if(req.method==='GET' && req.url==='/health')return json(res,200,{status:'running',backend:'m365-cdp',live_verified:false,model:MODEL,...status});
       if(req.method==='GET'&&/^\/desktop-instance\?nonce=[0-9a-f]{64}$/.test(req.url)){
         const proof=instanceProof(req.url.slice(req.url.indexOf('=')+1));
         assert(proof,'instance_not_ready','画面の起動準備中です。',409);
@@ -55,6 +56,7 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{},in
       }});
       abortReason(signal);
       const envelope=parseEnvelope(raw,parsed);const result=completion(envelope,parsed);
+      status.m365_state='available';status.model_state='verified';
       // Persist BEFORE returning. A lost response is not silently replayed by this bridge.
       await ledger.set(fingerprint,'response_validated');settled=true;abortReason(signal);
       if(parsed.stream) {for(const c of streamChunks(result))res.write(`data: ${JSON.stringify(c)}\n\n`);res.end('data: [DONE]\n\n');}
@@ -62,6 +64,25 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{},in
       log({request_id:parsed.requestId,event:'response_returned',kind:envelope.action});
     } catch(error) {
       const safe=publicError(error);
+      if(safe.code==='sign_in_required'){
+        status.m365_state='sign_in_required';
+        status.model_state='not_verified';
+      } else if(MODEL_UNAVAILABLE_CODES.includes(safe.code)){
+        // A previous successful request must not make a failed model check
+        // look usable. M365 itself may still be signed in, but this request
+        // did not verify the requested model.
+        status.m365_state='not_verified';
+        status.model_state='unavailable';
+      } else if(possiblySent || RESULT_UNCONFIRMED_CODES.includes(safe.code)){
+        // After onBeforeSend, the bridge cannot know whether M365 committed
+        // the request. Expose that uncertainty and never leave available /
+        // verified from an earlier request in place.
+        status.m365_state='result_unconfirmed';
+        status.model_state='not_verified';
+      } else if(['cdp_unavailable','editor_not_ready','conversation_not_empty','new_chat_required'].includes(safe.code)){
+        status.m365_state='not_verified';
+        status.model_state='not_verified';
+      }
       if(fingerprint&&!settled) {
         try{await ledger.set(fingerprint,possiblySent?'unknown_or_invalid':'not_sent');}catch{}
       }
@@ -69,7 +90,7 @@ export function createBridgeServer({config,template,backend,ledger,log=()=>{},in
         queue_wait_ms:queueWaitMs??(queueStarted===undefined?undefined:Math.round(now()-queueStarted))});
       if(!res.destroyed&&!res.writableEnded) {
         if(res.headersSent) {res.write(`data: ${JSON.stringify({error:safe})}\n\n`);res.end('data: [DONE]\n\n');}
-        else json(res,error instanceof BridgeError?error.status:signal.aborted?504:500,{error:safe});
+        else json(res,error instanceof BridgeError?error.status:(safe.code==='cancelled_or_timed_out'||signal.aborted)?504:500,{error:safe});
       }
     } finally {
       clearInterval(timer);release?.();controllers.delete(client);req.removeListener('aborted',aborted);res.removeListener('close',aborted);

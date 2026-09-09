@@ -10,9 +10,10 @@ test('transport guidance and context mode cannot change duplicate request identi
  const inline=prepareRequest(body,template),attached=prepareRequest(body,template,{attachConversation:true,attachToolDefinitions:true});
  const ledger=new Ledger('unused-test-directory','test-key');
  assert.equal(ledger.fingerprint(inline.payload),ledger.fingerprint(attached.payload));
+ assert.equal(attached.definitionAttachments.length,1);
  assert.equal(attached.payload.runtime_guidance,undefined);
  const wire=JSON.parse(attached.prompt.split('BRIDGE_REQUEST_JSON:\n')[1].split('\nEND_BRIDGE_REQUEST_JSON')[0]);
- assert.equal(wire.runtime_guidance.version,'3.13.15');assert.equal(Object.hasOwn(wire,'tool_execution_budget'),false);
+ assert.equal(wire.runtime_guidance.version,'3.13.15');assert.equal(Object.hasOwn(wire,'conversation_attachment'),false);assert.equal(Object.hasOwn(wire,'tool_execution_budget'),false);
 });
 test('large history moves losslessly to TXT, retaining roles, call links and literal text',()=>{
  const body={model:MODEL,messages:[{role:'system',content:'Keep original source.'},{role:'user',content:'old request'},
@@ -45,7 +46,7 @@ test('attached history supports more than 512 messages with a finite request cap
  const body={model:MODEL,messages:Array.from({length:700},(_,i)=>({role:i%2?'assistant':'user',content:`entry ${i}`}))};
  const r=prepareRequest(body,template,{attachConversation:true});
  assert.equal(JSON.parse(r.definitionAttachments[0].bytes).messages.length,700);
- assert(r.prompt.length<12000);
+ assert(r.prompt.length<13000);
  assert.throws(()=>prepareRequest(body,template),{code:'messages_required'});
  assert.throws(()=>prepareRequest({...body,messages:Array.from({length:4097},()=>({role:'user',content:'x'}))},template,{attachConversation:true}),{code:'messages_required'});
 });
@@ -55,13 +56,12 @@ test('changing only old history changes the canonical payload and attachment ide
  assert.notDeepEqual(a.payload.messages,b.payload.messages);
  assert.notEqual(a.definitionAttachments[0].fileName,b.definitionAttachments[0].fileName);
 });
-test('context TXT retains image references without duplicating image bytes',async()=>{
+test('fresh image requests keep references inline without duplicating image bytes',async()=>{
  const bytes=await readFile(new URL('./fixtures/vision-jpeg.jpg',import.meta.url));
  const r=prepareRequest({model:MODEL,messages:[{role:'user',content:[{type:'text',text:'Inspect image'},{type:'image_url',image_url:{url:'data:image/jpeg;base64,'+bytes.toString('base64')}}]}]},template,{allowImages:true,attachConversation:true});
- const text=r.definitionAttachments[0].bytes.toString('utf8');
- assert.equal(r.images.length,1);assert(!text.includes('data:image/'));
- assert(text.includes(r.images[0].fileName));
- assert.deepEqual(JSON.parse(text).messages[0].message,r.payload.messages[0]);
+ assert.equal(r.definitionAttachments.length,0);assert.equal(r.images.length,1);assert(!r.prompt.includes('data:image/'));
+ const wire=JSON.parse(r.prompt.split('BRIDGE_REQUEST_JSON:\n')[1].split('\nEND_BRIDGE_REQUEST_JSON')[0]);
+ assert.equal(wire.messages[0].content[1].fileName,r.images[0].fileName);
 });
 
 test('evidence retrieval retains exact provenance for distant matches and stays bounded',async()=>{

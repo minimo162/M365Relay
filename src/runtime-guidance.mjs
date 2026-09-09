@@ -2,7 +2,10 @@
 export function runtimeGuidance(messages){
  const user=messages.findLast(m=>m.role==='user');
  const text=typeof user?.content==='string'?user.content:JSON.stringify(user?.content??'');
- if(!/Excel|エクセル|Word|PowerPoint|PDF|\.xlsx\b|\.docx\b|\.pptx\b|資料|文書|教材|テキスト|内容を|概要|document|textbook|report contents/i.test(text))return undefined;
+ const exactCopy=/コピー|複製|clone|copy|byte|バイト|SHA-?256|ハッシュ|CRLF|改行.*完全|完全一致/i.test(text);
+ const documentTask=/Excel|エクセル|Word|PowerPoint|PDF|\.xlsx\b|\.docx\b|\.pptx\b|資料|文書|教材|テキスト|内容を|概要|document|textbook|report contents/i.test(text);
+ if(!documentTask&&!exactCopy)return undefined;
+ const integrityNote='For an exact file copy, never recreate the source text with create_file or an edit tool. Ask VS Code to run the bundled byte-preserving helper: & $env:M365_RELAY_NODE (Join-Path $env:M365_RELAY_APP \'src/cli.mjs\') copy-verify <source> <new-destination>. It uses fs.copyFile without decoding, fingerprints the source before and after copying, reads both files back, and compares byte counts and SHA-256. Do not overwrite an existing destination or report success when source_unchanged, byte_equal, and readback_verified are not all true. If Get-FileHash is used as a fallback, require exit code 0 and non-empty source/destination hashes; an empty HASH_MATCH=True after a command-not-found error is a failure.';
  return {component:'Python',version:'3.13.15',
   invocation:'& $env:M365_RELAY_PYTHON -I -B $env:M365_RELAY_DOCUMENTS <command> <arguments>',
   commands:['pdf-info input.pdf','pdf-text input.pdf --pages 1-5','pdf-read input.pdf output.json','pdf-render input.pdf output.png --page 1','xlsx-create draft.xlsx cells.json','xlsx-recalculate draft.xlsx result.xlsx','xlsx-read result.xlsx','office-pdf result.xlsx result.pdf','office-text input.docx','docx-create paragraphs.json result.docx','pptx-create slides.json result.pptx'],
@@ -14,6 +17,7 @@ export function runtimeGuidance(messages){
    'xlsx-create preserves strings, including leading zeros and formula-like literals. Formulas require a separate formula field. openpyxl does not calculate formulas. xlsx-read cached values can be absent or stale.',
    'xlsx-recalculate, office-pdf, docx-create and pptx-create require installed desktop Microsoft Office. They use its COM interfaces via Windows PowerShell without pywin32/lxml. If unavailable, report that limitation; never claim formulas or rendering were verified.',
    'All output names must be new. To recalculate into the final workbook, first create a separate draft. Never delete an existing output just to retry.',
+   ...(exactCopy?[integrityNote]:[]),
    'pdf-read input.pdf output.json saves complete JSON exclusively; omit output.json to print it. Omit --pages for all pages; never guess the last page. Read the saved JSON directly from your Python script.',
    'PDF textItems are character boxes, not reconstructed table cells. Use page text together with coordinates and rendered images. OCR is not included.',
    'For visual verification, export Office to a new PDF, render required pages to PNG, then use view_image. Structural readback is not visual verification. JSON examples are syntax only; adapt data and filenames.'

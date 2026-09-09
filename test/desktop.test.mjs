@@ -33,6 +33,7 @@ test('first-run setup creates an isolated usable model without modifying a norma
  assert.equal(settings['editor.fontSize'],16);assert.equal(settings['chat.fontSize'],16);
  assert.equal(settings['chat.editor.fontSize'],16);assert.equal(settings['window.zoomLevel'],1);
  assert.equal(settings['chat.permissions.default'],'autopilot');
+ assert.equal(settings['m365Relay.statusUrl'],'http://127.0.0.1:8731/health');
  assert.equal(settings['workbench.startupEditor'],'none');
  assert.equal(settings['workbench.secondarySideBar.defaultVisibility'],'maximized');
  assert.equal(settings['chat.viewSessions.enabled'],true);
@@ -75,7 +76,19 @@ test('workspace arguments are validated and launching never interprets them thro
  }});
  assert.deepEqual(captured.args,['--user-data-dir',plan.userDataDir,'--extensions-dir',plan.extensionsDir,'--skip-welcome','--new-window',await realpath(folder)]);
  assert.equal(captured.options.shell,false);assert.equal(captured.options.env.ELECTRON_RUN_AS_NODE,undefined);
+ assert.equal(captured.options.env.M365_RELAY_WORKSPACE_STATE,plan.workspaceStateFile);
  assert(!JSON.stringify(captured.args).includes(c.token));
+});
+
+test('reuses the dedicated last workspace and refuses a removed remembered folder',async t=>{
+ const c=await fixture(t),remembered=join(c.home,'remembered'),explicit=join(c.home,'explicit');
+ await mkdir(remembered);await writeFile(join(c.home,'workspace-state.json'),JSON.stringify({version:1,path:remembered,updated_at:new Date().toISOString()}));
+ const plan=await prepareDesktop(c,{executable:'Code.exe'});
+ assert.equal(plan.workspace,await realpath(remembered));
+ await mkdir(explicit);const override=await prepareDesktop(c,{executable:'Code.exe',workspace:explicit});
+ assert.equal(override.workspace,await realpath(explicit));
+ await rm(remembered,{recursive:true});
+ await assert.rejects(prepareDesktop(c,{executable:'Code.exe'}),{code:'workspace_not_found'});
 });
 
 test('VS Code discovery reports missing prerequisite and supports explicit portable path',async()=>{
@@ -131,6 +144,7 @@ test('bundled Python is exposed without changing global PATH or other terminal p
  const plan=await prepareDesktop(c,{runtimeExecutable:join(runtime,'node.exe'),executable:'Code.exe'});
  const settings=JSON.parse(await readFile(join(plan.userDataDir,'User','settings.json'),'utf8'));
  const env=settings['terminal.integrated.env.windows'];
+ assert.match(env.M365_RELAY_APP,/M365Relay[\\/]*$/i);
  assert.equal(env.M365_RELAY_PYTHON,await realpath(join(runtime,'python','python.exe')));
  assert.equal(env.M365_RELAY_OFFICECLI,undefined);assert.match(env.M365_RELAY_DOCUMENTS,/document_runtime.py$/);
  assert(!Object.keys(env).some(k=>k.toLowerCase()==='path'));

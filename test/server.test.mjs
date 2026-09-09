@@ -31,12 +31,43 @@ test('HTTP auth/host/origin guards reject without inference',async t=>{
   assert.equal(s.calls(),0);
 });
 test('HTTP models and health do not trigger M365 requests',async t=>{
-  const s=await setup(t);const health=await (await fetch(s.url+'/health')).json();assert.equal(health.live_verified,false);
+ const s=await setup(t);const health=await (await fetch(s.url+'/health')).json();assert.equal(health.live_verified,false);
+ assert.equal(health.status,'running');assert.equal(health.server_state,'running');assert.equal(health.m365_state,'not_verified');assert.equal(health.model_state,'not_verified');
   const models=await (await fetch(s.url+'/v1/models',{headers:{Authorization:`Bearer ${token}`}})).json();assert.equal(models.data[0].id,MODEL);assert.equal(s.calls(),0);
 });
 test('nonstream native Chat Completions result',async t=>{
   const s=await setup(t);const r=await s.post();assert.equal(r.status,200);const data=await r.json();
   assert.equal(data.object,'chat.completion');assert.equal(data.choices[0].message.content,'テスト回答');assert.equal(data.usage,undefined);
+  const health=await (await fetch(s.url+'/health')).json();assert.equal(health.m365_state,'available');assert.equal(health.model_state,'verified');
+});
+test('health records a sign-in requirement without claiming availability',async t=>{
+  const s=await setup(t,async()=>{throw new BridgeError('sign_in_required','Sign in',503);});
+  assert.equal((await s.post()).status,503);
+  const health=await (await fetch(s.url+'/health')).json();assert.equal(health.m365_state,'sign_in_required');assert.equal(health.model_state,'not_verified');
+});
+test('health clears availability after a post-send timeout',async t=>{
+ let n=0;const s=await setup(t,async(r,o)=>{
+   await o.onBeforeSend();
+   if(n++===0)return final(r);
+   throw new DOMException('timed out','TimeoutError');
+ });
+ assert.equal((await s.post({...base,messages:[{role:'user',content:'first'}]})).status,200);
+ const failed=await s.post({...base,messages:[{role:'user',content:'second'}]});
+ assert.equal(failed.status,504);
+ const health=await (await fetch(s.url+'/health')).json();
+ assert.equal(health.m365_state,'result_unconfirmed');
+ assert.equal(health.model_state,'not_verified');
+});
+test('health records the producer model error code and clears stale availability',async t=>{
+ let n=0;const s=await setup(t,async(r,o)=>{
+   if(n++===0){await o.onBeforeSend();return final(r);}
+   throw new BridgeError('copilot_model_unavailable','Model unavailable',503);
+ });
+ assert.equal((await s.post({...base,messages:[{role:'user',content:'first'}]})).status,200);
+ assert.equal((await s.post({...base,messages:[{role:'user',content:'second'}]})).status,503);
+ const health=await (await fetch(s.url+'/health')).json();
+ assert.equal(health.m365_state,'not_verified');
+ assert.equal(health.model_state,'unavailable');
 });
 test('stream native tool call and terminal event, no partial tool execution',async t=>{
   const s=await setup(t,async(r,o)=>{await o.onBeforeSend();return JSON.stringify({protocol:PROTOCOL,request_id:r.requestId,action:'tool_calls',content:'読む',tool_calls:[{name:'native_tool',arguments:{path:'test.txt'}}],complete:true});});

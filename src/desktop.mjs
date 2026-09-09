@@ -6,8 +6,10 @@ import {once} from 'node:events';
 import {fileURLToPath} from 'node:url';
 import {strictJson,isObject} from './json.mjs';
 import {BridgeError,assert} from './errors.mjs';
+import {readRememberedWorkspace,workspaceStatePath} from './workspace-state.mjs';
 
 const groupName='M365Relay';
+const appRoot=fileURLToPath(new URL('../',import.meta.url));
 async function optionalText(path){try{return await readFile(path,'utf8');}catch(e){if(e.code==='ENOENT')return null;throw e;}}
 async function updateJson(path,transform){
  const before=await optionalText(path);
@@ -46,8 +48,10 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
  try{await stat(userDataDir);}catch(error){if(error.code!=='ENOENT')throw error;newProfile=true;}
  const userDir=join(userDataDir,'User');
  let useBootstrap=false;
- const folder=workspace?resolve(workspace):join(config.home,'workspace');
- if(workspace){
+ const explicitWorkspace=workspace!==undefined&&workspace!==null&&workspace!=='';
+ const rememberedWorkspace=explicitWorkspace?undefined:await readRememberedWorkspace(workspaceStatePath(config.home));
+ const folder=resolve(explicitWorkspace?workspace:(rememberedWorkspace??join(config.home,'workspace')));
+ if(explicitWorkspace||rememberedWorkspace){
   let directory=false;try{directory=(await stat(folder)).isDirectory();}catch{}
   assert(directory,'workspace_not_found','指定された作業フォルダーがありません。既存のフォルダーを指定してください。',400);
  }else{
@@ -102,7 +106,8 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
     'chat.viewSessions.enabled':true,'chat.viewSessions.orientation':'sideBySide',
     'security.workspace.trust.enabled':false,
     'chat.permissions.default':'autopilot',
-    'terminal.integrated.env.windows':{...migratedEnv,M365_RELAY_NODE:runtimeExecutable,M365_RELAY_PDF:pdfCommand,
+    'm365Relay.statusUrl':`http://127.0.0.1:${config.port}/health`,
+    'terminal.integrated.env.windows':{...migratedEnv,M365_RELAY_APP:appRoot,M365_RELAY_NODE:runtimeExecutable,M365_RELAY_PDF:pdfCommand,
       ...(pythonExecutable?{M365_RELAY_PYTHON:pythonExecutable,M365_RELAY_DOCUMENTS:documentCommand}:{})}};
  });
  // Pin the actual profile directory as well as the workspace. Packaged Windows
@@ -112,7 +117,7 @@ export async function prepareDesktop(config,{workspace,executable,resolveRealPat
  try{actualUserDataDir=await realpath(userDataDir);}catch{
   throw new BridgeError('profile_resolution_failed','専用VS Code設定の実際の保存先を確認できません。起動せず停止しました。',400);
  }
- return {executable,userDataDir:actualUserDataDir,workspace:actualFolder,runtimeExecutable,pythonExecutable,documentCommand,pdfCommand,port:config.port,
+ return {executable,userDataDir:actualUserDataDir,workspace:actualFolder,workspaceStateFile:workspaceStatePath(config.home),runtimeExecutable,pythonExecutable,documentCommand,pdfCommand,port:config.port,
    ...(useBootstrap?{extensionsDir:join(config.home,'vscode-extensions')}:{})};
 }
 
@@ -141,6 +146,7 @@ export async function launchDesktop(plan,{spawnProcess=spawn,observeWindow=obser
   for(const name of ['M365_RELAY_OFFICECLI','OFFICECLI_SKIP_UPDATE','OFFICECLI_NO_AUTO_RESIDENT','OFFICECLI_RESIDENT_FLUSH'])delete env[name];
   Object.assign(env,{M365_RELAY_PYTHON:plan.pythonExecutable,M365_RELAY_DOCUMENTS:plan.documentCommand});
  }
+ if(plan.workspaceStateFile)env.M365_RELAY_WORKSPACE_STATE=plan.workspaceStateFile;
  const child=spawnProcess(plan.executable,['--user-data-dir',plan.userDataDir,...(plan.extensionsDir?['--extensions-dir',plan.extensionsDir,'--skip-welcome']:[]),'--new-window',plan.workspace],
   {detached:true,stdio:'ignore',shell:false,env});
  let onExit;

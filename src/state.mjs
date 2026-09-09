@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, rename, unlink, rm } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, appendFile, rename, unlink, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { uptime } from 'node:os';
 import { createHmac, randomUUID } from 'node:crypto';
@@ -25,10 +25,22 @@ export class SerialQueue {
 }
 /** Records only keyed request fingerprints, IDs and transport state, never prompts/results. */
 export class Ledger {
-  constructor(home, key) {this.path=join(home,'requests.json');this.key=key;this.records={};}
+  constructor(home, key, {maxRecords=10000,rotateTo=Math.max(1,maxRecords-1000)}={}) {
+    this.path=join(home,'requests.json');this.archivePath=join(home,'requests.archive.jsonl');this.key=key;
+    this.maxRecords=maxRecords;this.rotateTo=Math.min(maxRecords-1,Math.max(0,rotateTo));this.records={};this.archived=new Map();
+  }
   async load() {
     try { const r=strictJson(await readFile(this.path,'utf8'),{maxBytes:8*1024*1024}); assert(isObject(r),'invalid_ledger','要求台帳が不正です。'); this.records=r; }
     catch(e) { if(e.code!=='ENOENT')throw e; }
+    try {
+      const text=await readFile(this.archivePath,'utf8');
+      for(const line of text.split(/\r?\n/)) {
+        if(!line)continue;
+        const row=strictJson(line,{maxBytes:16*1024});
+        assert(isObject(row)&&typeof row.hash==='string'&&isObject(row.record),'invalid_ledger','要求台帳の保管記録が不正です。');
+        this.archived.set(row.hash,row.record);
+      }
+    } catch(e) { if(e.code!=='ENOENT')throw e; }
   }
   fingerprint(payload) {
     const {request_id, ...semantic}=payload;
@@ -39,12 +51,28 @@ export class Ledger {
     await writeFile(temp,JSON.stringify(this.records,null,2),{mode:0o600});
     try { await rename(temp,this.path); } finally { await unlink(temp).catch(()=>{}); }
   }
+  async rotateClosedRecords() {
+    const entries=Object.entries(this.records)
+      .filter(([,record])=>['response_validated','unknown_or_invalid','not_sent'].includes(record?.status))
+      .sort((a,b)=>String(a[1]?.at??'').localeCompare(String(b[1]?.at??'')));
+    const count=Math.max(0,Object.keys(this.records).length-this.rotateTo);
+    const selected=entries.slice(0,count);
+    if(!selected.length) return false;
+    const lines=selected.map(([hash,record])=>JSON.stringify({hash,record,archived_at:new Date().toISOString()})+'\n').join('');
+    await appendFile(this.archivePath,lines,{encoding:'utf8',mode:0o600});
+    for(const [hash,record] of selected){this.archived.set(hash,record);delete this.records[hash];}
+    await this.flush();
+    return true;
+  }
   async reserve(req) {
-    const hash=this.fingerprint(req.payload), old=this.records[hash];
+    const hash=this.fingerprint(req.payload), old=this.records[hash]??this.archived.get(hash);
     if(old && old.status!=='not_sent') throw new BridgeError('duplicate_request',
       '同じ要求は処理済み、処理中、または結果不明です。自動で再送しません。再試行が必要な場合はチャットに明示的な追加指示を書いてください。',409,
       {prior_request_id:old.id,transport_status:old.status});
-    assert(Object.keys(this.records).length < 10000 || old,'ledger_full','要求台帳が上限です。停止後に管理者が保管・初期化してください。',409);
+    if(Object.keys(this.records).length>=this.maxRecords) {
+      const rotated=await this.rotateClosedRecords();
+      assert(rotated,'ledger_full','要求台帳が上限です。保管済みの重複判定情報を残したまま整理できる記録がありません。',409);
+    }
     this.records[hash]={id:req.requestId,status:'reserved',at:new Date().toISOString()}; await this.flush(); return hash;
   }
   async set(hash,status) { this.records[hash]={...this.records[hash],status,at:new Date().toISOString()}; await this.flush(); }

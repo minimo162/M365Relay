@@ -5,8 +5,8 @@ import { parseEnvelope } from './protocol.mjs';
 import { assert, BridgeError, delay, abortReason } from './errors.mjs';
 
 export class M365Backend {
-  constructor(config,{connect=connectOwnedBrowser,selectModel,attachImages,editorStableMs=1000,inputSettleMs=8000,inputPollMs=75,inputStableMs=250,sendReadyMs=15000,sendReadyStableMs=250,onMetrics=()=>{},responsePollMs=config.pollIntervalMs,responseStableMs=config.stableMs}={}){
-    this.config=config;this.connect=connect;this.onMetrics=onMetrics;this.selectModel=selectModel;this.attachImages=attachImages;
+  constructor(config,{connect=connectOwnedBrowser,selectModel,attachImages,editorStableMs=1000,inputSettleMs=8000,inputPollMs=75,inputStableMs=250,sendReadyMs=15000,sendReadyStableMs=250,onMetrics=()=>{},onState=()=>{},responsePollMs=config.pollIntervalMs,responseStableMs=config.stableMs}={}){
+    this.config=config;this.connect=connect;this.onMetrics=onMetrics;this.onState=onState;this.selectModel=selectModel;this.attachImages=attachImages;
     this.inputTiming={editorStableMs,inputSettleMs,inputPollMs,inputStableMs,sendReadyMs,sendReadyStableMs};
     this.responseTiming={responsePollMs,responseStableMs};
   }
@@ -17,7 +17,9 @@ export class M365Backend {
     const config=this.config;let browser,targetId,sessionId,sent=false,success=false,failure,phase = 'connect';
     const started=performance.now();let phaseStarted=started,snapshots=0,firstReplyMs=null,lastReplyChangeMs=null;
     const durations={};
-    const enter=next=>{const now=performance.now();durations[phase]=(durations[phase]??0)+(now-phaseStarted);phase=next;phaseStarted=now;};
+    const enter=next=>{const now=performance.now();durations[phase]=(durations[phase]??0)+(now-phaseStarted);phase=next;phaseStarted=now;
+      try{Promise.resolve(this.onState({event:'backend_state',request_id:request.requestId,backend_phase:next})).catch(()=>{});}catch{}
+    };
     const evaluate=async(operation,args={},s=signal)=>{
       const r=await browser.send('Runtime.evaluate',{expression:domExpression(config,operation,args),returnByValue:true,userGesture:true},sessionId,s,15000);
       const fail=raw=>{
@@ -153,7 +155,9 @@ export class M365Backend {
           catch(error){lastError=error;}
         }
         throw new BridgeError('m365_response_invalid','生成が終了しましたが、完全なJSON・要求ID・ツール引数を検証できません。回答の修復や再送はしません。',502,
-          {validation_code:lastError?.code??'invalid_json'});
+          {validation_code:lastError?.code??'invalid_json',response_snapshots:snapshots,
+            first_reply_observed_ms:firstReplyMs===null?null:Math.round(firstReplyMs),
+            last_reply_change_observed_ms:lastReplyChangeMs===null?null:Math.round(lastReplyChangeMs)});
       }
     } catch(error) {
       failure=error instanceof BridgeError || error?.name==='AbortError' || error?.name==='TimeoutError' ? error : internalFailure(error);
@@ -184,10 +188,14 @@ export class M365Backend {
     }
   }
 }
-export async function diagnoseBrowser(config){
-  const signal=AbortSignal.timeout(10000),browser=await connectOwnedBrowser(config,signal);
+export async function diagnoseBrowser(config,{connect=connectOwnedBrowser}={}){
+  const signal=AbortSignal.timeout(10000),browser=await connect(config,signal);
   try{const {targetInfos}=await browser.send('Target.getTargets',{},undefined,signal);
-    return {profile_verified:true,m365_tabs:(targetInfos??[]).filter(t=>{try{return t.type==='page'&&new URL(t.url).origin===config.origin;}catch{return false;}}).length,
-      live_send_performed:false};
+    const pages=(targetInfos??[]).filter(t=>t.type==='page');
+    const m365Tabs=pages.filter(t=>{try{return new URL(t.url).origin===config.origin;}catch{return false;}});
+    const signInTabs=pages.filter(t=>{try{return /^https:\/\/(login|account|login\.live)\./i.test(new URL(t.url).origin);}catch{return false;}});
+    return {profile_verified:true,m365_tabs:m365Tabs.length,
+      m365_state:m365Tabs.length?'m365_page_observed':signInTabs.length?'sign_in_required':'not_verified',
+      model_state:'not_verified',live_send_performed:false};
   }finally{browser.close();}
 }

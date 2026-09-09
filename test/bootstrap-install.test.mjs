@@ -35,6 +35,30 @@ test('installer uses the scoped CLI without a shell and skips an intact installe
  await installBootstrap({executable:f.plan.executable},{run:()=>assert.fail('legacy profile must not install')});
 });
 
+test('new bootstrap version upgrades an intact previous extension beside it',async t=>{
+ const f=await fixture(t);
+ const oldDir=join(f.plan.extensionsDir,'m365relay.first-run-model-setup-0.1.0');
+ await mkdir(oldDir,{recursive:true});
+ await writeFile(join(oldDir,'package.json'),JSON.stringify(f.metadata));
+ await writeFile(join(oldDir,'extension.cjs'),'previous trusted extension');
+ const current={...f.metadata,version:'0.1.1'};
+ await writeFile(join(f.bundle,'package.json'),JSON.stringify(current));
+ await writeFile(join(f.bundle,'extension.cjs'),'new status extension');
+ let calls=0;
+ const run=async()=>{
+  calls++;
+  const installed=join(f.plan.extensionsDir,'m365relay.first-run-model-setup-0.1.1');
+  await mkdir(installed,{recursive:true});
+  for(const name of ['package.json','extension.cjs'])await writeFile(join(installed,name),await readFile(join(f.bundle,name)));
+ };
+ await installBootstrap(f.plan,{bundleDir:f.bundle,run});
+ assert.equal(calls,1);
+ assert.equal(await readFile(join(oldDir,'extension.cjs'),'utf8'),'previous trusted extension');
+ assert.equal(JSON.parse(await readFile(join(f.plan.extensionsDir,'m365relay.first-run-model-setup-0.1.1/package.json'))).version,'0.1.1');
+ await installBootstrap(f.plan,{bundleDir:f.bundle,run});
+ assert.equal(calls,1);
+});
+
 test('installer refuses an escaped CLI path and reports installation failure',async t=>{
  const f=await fixture(t);
  await assert.rejects(installBootstrap(f.plan,{bundleDir:f.bundle,run:async()=>{throw Error('fixture');}}),{code:'vscode_setup_failed'});

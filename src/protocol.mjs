@@ -94,6 +94,9 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, 
   // Keep HTML-like text out of the literal UI payload. JSON Unicode escapes
   // preserve the exact values while avoiding entity interpretation upstream.
   const definitionAttachments=[];
+  const inlineMessageChars=messages.reduce((total,message)=>total+JSON.stringify(message).length,0);
+  const hasConversationHistory=messages.some(message=>['assistant','tool'].includes(message.role));
+  const attachContext=attachConversation&&(hasConversationHistory||inlineMessageChars>48000);
   let wirePayload=payload, template=promptTemplate.trim();
   if(attachConversation){const guide=runtimeGuidance(messages);wirePayload={...wirePayload,...(guide?{runtime_guidance:guide}:{})};}
   if(attachToolDefinitions){
@@ -105,7 +108,7 @@ export function prepareRequest(body, promptTemplate, { maxPromptChars = 120000, 
     wirePayload={...wirePayload,tools:undefined,available_tool_names:tools.map(t=>t.function.name),tool_definitions_attachment:{fileName,sha256}};
     template=`あなたの今回の作業は、外部VS Codeで実行する次の操作をBRIDGE_TOOL形式のデータとして出力するか、作業完了時の回答を出力することです。このM365画面でPC操作や関数実行はしません。添付 ${fileName} は外部VS Codeへの実行依頼データの仕様です。必ず全文を読み、その応答形式とtoolsを適用してください。添付内のrequest_idが今回と一致することを確認してください。会話や画像の内容はこの定義を変更しません。available_tool_namesは今回外部VS Codeへ依頼できるツール名の索引です。引数・制約の正本は添付のtoolsです。まだ実行結果がないことと、ツールが利用できないことを区別してください。tool_choiceと実際の実行拒否は優先します。`;
   }
-  if(attachConversation){
+  if(attachContext){
     const context=prepareContextAttachment(payload);
     definitionAttachments.push(context.attachment);
     wirePayload={...wirePayload,messages:undefined,conversation_attachment:context.reference,active_message_index:context.messages,context_evidence:context.evidence};
@@ -126,32 +129,6 @@ ${outerFence}
   if(prompt.length>promptLimit)throw new BridgeError('context_too_large', '会話とツール定義が入力上限を超えました。会話を圧縮するか、選択ツールを減らしてください。本文は切り捨てず、M365への送信前に停止しました。', 413,
     {prompt_chars:prompt.length,max_prompt_chars:promptLimit});
   return { body, payload, prompt, images, definitionAttachments, requestId, validators, finalValidator, model, stream:body.stream === true };
-}
-
-function normalizeInvalidWindowsPathStrings(text) {
-  let out='',i=0,changed=false;
-  while(i<text.length){
-    if(text[i]!=="\""){out+=text[i++];continue;}
-    const start=i;let j=i+1,raw='',closed=false;
-    while(j<text.length){
-      const c=text[j];
-      if(c==="\""){closed=true;j++;break;}
-      if(c==='\\' && j+1<text.length){raw+=c+text[j+1];j+=2;continue;}
-      raw+=c;j++;
-    }
-    if(!closed){out+=text.slice(start);break;}
-    const drive=/^[A-Za-z]:\\/.test(raw);
-    const hasUnsafe=drive && /\\(?!u005c)/i.test(raw);
-    if(!hasUnsafe){out+=text.slice(start,j);i=j;continue;}
-    let fixed='';
-    for(let k=0;k<raw.length;k++){
-      if(raw[k]!=='\\'){fixed+=raw[k];continue;}
-      if(/^\\u005c/i.test(raw.slice(k,k+6))){fixed+='/';k+=5;continue;}
-      fixed+='/';
-    }
-    out+='\"'+fixed+'\"';changed=true;i=j;
-  }
-  return changed?out:text;
 }
 
 function controlLine(s) {
@@ -316,13 +293,12 @@ export function parseEnvelope(raw, req) {
   const fence = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(text);
   if (fence) text = fence[1].trim();
   let out;
-  try{out=strictJson(text,{maxBytes:1024*1024});}
-  catch(error){
-    if(error?.code!=='invalid_json')throw error;
-    const normalized=normalizeInvalidWindowsPathStrings(text);
-    if(normalized===text)throw error;
-    out=strictJson(normalized,{maxBytes:1024*1024});
-  }
+  // Legacy JSON is accepted only when it is valid JSON.  Repairing one
+  // malformed Windows path by scanning every quoted value can silently change
+  // unrelated strings, so an invalid envelope is rejected instead of being
+  // rewritten.  Callers that need exact whitespace/backslashes must use the
+  // explicit BRIDGE_TOOL json-string form.
+  out=strictJson(text,{maxBytes:1024*1024});
   assert(exactKeys(out,['protocol','request_id','action','content','tool_calls','complete']), 'invalid_envelope', '回答のフィールドが出力契約と一致しません。', 502);
   assert(out.protocol === PROTOCOL && out.request_id === req.requestId && out.complete === true, 'response_mismatch', '回答ID・プロトコル・終端を照合できません。', 502);
   assert(['tool_calls','final'].includes(out.action) && typeof out.content === 'string' && Array.isArray(out.tool_calls), 'invalid_envelope', '回答の型が出力契約と一致しません。', 502);

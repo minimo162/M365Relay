@@ -7,13 +7,14 @@ import {existingDesktopPlan,registerDesktopInstance} from '../src/desktop-instan
 import {createBridgeServer} from '../src/server.mjs';
 import {Ledger} from '../src/state.mjs';
 import {MODEL,PROTOCOL} from '../src/protocol.mjs';
+import {workspaceStatePath} from '../src/workspace-state.mjs';
 
 async function setup(t,complete){
  const home=await mkdtemp(join(tmpdir(),'relay-instance-'));
  await Promise.all(['bridge.lock','vscode-data','workspace','other'].map(p=>mkdir(join(home,p))));
  await writeFile(join(home,'bridge.lock','owner.json'),JSON.stringify({pid:process.pid,started:new Date().toISOString()}));
  const config={home,token:'c'.repeat(64),requestTimeoutMs:3000,maxQueue:1,maxPromptChars:120000};
- const plan={executable:process.execPath,userDataDir:await realpath(join(home,'vscode-data')),workspace:await realpath(join(home,'workspace')),runtimeExecutable:process.execPath};
+ const plan={executable:process.execPath,userDataDir:await realpath(join(home,'vscode-data')),workspace:await realpath(join(home,'workspace')),runtimeExecutable:process.execPath,workspaceStateFile:workspaceStatePath(home)};
  let prove;
  const ledger=new Ledger(home,config.token);await ledger.load();
  const server=createBridgeServer({config,template:'',backend:{complete:complete??(()=>{throw Error('Must not call M365');})},ledger,instanceProof:nonce=>prove?.(nonce)});
